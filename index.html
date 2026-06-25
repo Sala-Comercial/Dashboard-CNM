@@ -40,10 +40,11 @@
   /* ── SASI LDR Hub identity ── */
   --primary:       #4f46e5;
   --primary-light: #818cf8;
-  --sidebar:       #1a1e30;
+  --sidebar:       #1a1f37;
   --sidebar-2:     #232842;
-  --sidebar-text:  #aab0c8;
-  --sidebar-muted: #6b7290;
+  --sidebar-text:  #cdd1e0;
+  --sidebar-muted: #6e7490;
+  --side-active:   #5b54e8;
 }
 body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 13px; }
 
@@ -52,21 +53,23 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; b
 
 /* ── SIDEBAR ── */
 .sidebar { width: 256px; flex-shrink: 0; background: var(--sidebar); color: var(--sidebar-text); display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; z-index: 60; }
-.brand { display: flex; align-items: center; gap: 11px; padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.07); }
-.brand-mark { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, var(--primary), #7c74f0); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 15px; flex-shrink: 0; }
-.brand-name { font-size: 17px; font-weight: 800; color: #fff; letter-spacing: -0.3px; line-height: 1; }
-.brand-sub { font-size: 9px; font-weight: 700; letter-spacing: 2.5px; color: var(--primary-light); margin-top: 4px; }
-.side-nav { flex: 1; padding: 14px 12px; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
-.side-item { display: flex; align-items: center; gap: 12px; padding: 10px 13px; border-radius: 9px; font-size: 13px; font-weight: 600; color: var(--sidebar-text); cursor: pointer; user-select: none; transition: background 0.15s, color 0.15s; white-space: nowrap; }
-.side-item svg { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.8; }
-.side-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
-.side-item.active { background: var(--primary); color: #fff; box-shadow: 0 6px 16px rgba(79,70,229,0.35); }
+.brand { display: flex; align-items: flex-start; gap: 9px; padding: 22px 22px 14px; }
+.brand-lockup { display: flex; flex-direction: column; }
+.brand-word { position: relative; display: inline-flex; align-items: flex-start; font-size: 23px; font-weight: 800; color: #fff; letter-spacing: -0.5px; line-height: 1; }
+.brand-swoosh { width: 11px; height: 11px; margin-left: 1px; margin-top: 1px; }
+.brand-tag { font-size: 7px; font-weight: 500; letter-spacing: 0.4px; color: #7e84a0; margin-top: 3px; }
+.brand-ldr { font-size: 11px; font-weight: 700; letter-spacing: 2.5px; color: #c2c7da; margin-top: 5px; }
+.side-nav { flex: 1; padding: 8px 14px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+.side-item { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 12px; font-size: 14.5px; font-weight: 500; color: var(--sidebar-text); cursor: pointer; user-select: none; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+.side-item svg { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.9; }
+.side-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+.side-item.active { background: var(--side-active); color: #fff; font-weight: 600; box-shadow: 0 8px 18px rgba(91,84,232,0.40); }
 .side-item.active svg { opacity: 1; }
-.sidebar-foot { padding: 14px 12px; border-top: 1px solid rgba(255,255,255,0.07); }
-.sidebar-foot .support { display: flex; align-items: center; gap: 12px; color: var(--sidebar-text); font-weight: 600; font-size: 12.5px; cursor: pointer; padding: 10px 13px; border-radius: 9px; transition: background 0.15s; }
-.sidebar-foot .support:hover { background: rgba(255,255,255,0.06); color: #fff; }
-.sidebar-foot .support svg { width: 18px; height: 18px; flex-shrink: 0; }
-.sidebar-foot .ver { font-size: 10.5px; color: var(--sidebar-muted); line-height: 1.7; padding: 10px 13px 4px; }
+.sidebar-foot { padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); }
+.sidebar-foot .support { display: flex; align-items: center; gap: 14px; color: var(--sidebar-text); font-weight: 500; font-size: 14.5px; cursor: pointer; padding: 12px 14px; border-radius: 12px; transition: background 0.15s; }
+.sidebar-foot .support:hover { background: rgba(255,255,255,0.05); color: #fff; }
+.sidebar-foot .support svg { width: 20px; height: 20px; flex-shrink: 0; }
+.sidebar-foot .ver { font-size: 11px; color: var(--sidebar-muted); line-height: 1.7; padding: 14px 14px 4px; }
 
 /* ── MAIN ── */
 .main { flex: 1; margin-left: 256px; display: flex; flex-direction: column; min-width: 0; }
@@ -94,7 +97,7 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; b
 @media (max-width: 860px) {
   .sidebar { width: 66px; }
   .brand { justify-content: center; padding: 18px 0; }
-  .brand-name, .brand-sub, .side-item span, .sidebar-foot .support span, .sidebar-foot .ver { display: none; }
+  .brand-tag, .brand-ldr, .side-item span, .sidebar-foot .support span, .sidebar-foot .ver { display: none; }
   .side-item, .sidebar-foot .support { justify-content: center; padding: 11px; }
   .main { margin-left: 66px; }
 }
@@ -292,11 +295,11 @@ tfoot td { font-weight: 700; background: rgba(79,70,229,0.06); border-top: 1px s
   <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-mark">S</div>
-      <div>
-        <div class="brand-name">SASI</div>
-        <div class="brand-sub">LDR HUB</div>
+      <div class="brand-lockup">
+        <div class="brand-word">SASI<img class="brand-swoosh" src="favicon.png" alt=""></div>
+        <div class="brand-tag">Conversão Comercial</div>
       </div>
+      <div class="brand-ldr">LDR HUB</div>
     </div>
     <nav class="side-nav">
       <div class="side-item active" onclick="show(0)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>Visão Geral</span></div>
