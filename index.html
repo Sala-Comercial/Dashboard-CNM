@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/png" href="favicon-tab.png">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
-<title>SASI LDR Hub — Campanha Cidade na Mão 2026</title>
+<title>SASI · Dashboard Cidade na Mão</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -57,9 +57,9 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; b
 .brand { display: flex; align-items: flex-start; gap: 9px; padding: 22px 22px 14px; }
 .brand-lockup { display: flex; flex-direction: column; }
 .brand-word { position: relative; display: inline-flex; align-items: flex-start; font-size: 23px; font-weight: 800; color: #fff; letter-spacing: -0.5px; line-height: 1; }
-.brand-swoosh { width: 11px; height: 11px; margin-left: 1px; margin-top: 1px; }
+.brand-mark { width: 18px; height: 18px; margin-left: 2px; margin-top: -2px; flex-shrink: 0; }
 .brand-tag { font-size: 7px; font-weight: 500; letter-spacing: 0.4px; color: #7e84a0; margin-top: 3px; }
-.brand-ldr { font-size: 11px; font-weight: 700; letter-spacing: 2.5px; color: #c2c7da; margin-top: 5px; }
+.brand-ldr { font-size: 11px; font-weight: 700; letter-spacing: 0.2px; color: #c2c7da; margin-top: 1px; line-height: 1.35; max-width: 92px; }
 .side-nav { flex: 1; padding: 8px 14px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
 .side-item { display: flex; align-items: center; gap: 13px; padding: 11px 14px; border-radius: 12px; font-size: 14px; font-weight: 400; letter-spacing: 0.1px; color: var(--sidebar-text); cursor: pointer; user-select: none; transition: background 0.15s, color 0.15s; white-space: nowrap; }
 .side-item svg { width: 21px; height: 21px; flex-shrink: 0; opacity: 0.85; }
@@ -84,7 +84,8 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; b
 .app.collapsed .sidebar { width: 66px; }
 .app.collapsed .main { margin-left: 66px; }
 .app.collapsed .brand { justify-content: center; padding: 18px 0; }
-.app.collapsed .brand-tag, .app.collapsed .brand-ldr, .app.collapsed .side-item span, .app.collapsed .sidebar-foot .support span, .app.collapsed .sidebar-foot .ver { display: none; }
+.app.collapsed .brand-tag, .app.collapsed .brand-ldr, .app.collapsed .brand-name, .app.collapsed .side-item span, .app.collapsed .sidebar-foot .support span, .app.collapsed .sidebar-foot .ver { display: none; }
+.app.collapsed .brand-mark { width: 24px; height: 24px; margin: 0; }
 .app.collapsed .side-item, .app.collapsed .sidebar-foot .support { justify-content: center; padding: 11px; }
 .tb-left .crumb { font-size: 11.5px; color: var(--text-3); margin-bottom: 2px; }
 .tb-left .crumb b { color: var(--primary); font-weight: 700; }
@@ -107,7 +108,8 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; b
 @media (max-width: 860px) {
   .sidebar { width: 66px; }
   .brand { justify-content: center; padding: 18px 0; }
-  .brand-tag, .brand-ldr, .side-item span, .sidebar-foot .support span, .sidebar-foot .ver { display: none; }
+  .brand-tag, .brand-ldr, .brand-name, .side-item span, .sidebar-foot .support span, .sidebar-foot .ver { display: none; }
+  .brand-mark { width: 24px; height: 24px; margin: 0; }
   .side-item, .sidebar-foot .support { justify-content: center; padding: 11px; }
   .main { margin-left: 66px; }
 }
@@ -306,10 +308,10 @@ tfoot td { font-weight: 700; background: rgba(79,70,229,0.06); border-top: 1px s
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-lockup">
-        <div class="brand-word">SASI<img class="brand-swoosh" src="favicon.png" alt=""></div>
-        <div class="brand-tag">Conversão Comercial</div>
+        <div class="brand-word"><span class="brand-name">SASI</span><svg class="brand-mark" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5.5 13.5A8 8 0 0 1 13.5 21.5" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/><path d="M5.5 8A13.5 13.5 0 0 1 19 21.5" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/><circle cx="5.5" cy="21.5" r="3.2" fill="#EC2630"/></svg></div>
+        <div class="brand-tag">Comunicação Customizável</div>
       </div>
-      <div class="brand-ldr">LDR HUB</div>
+      <div class="brand-ldr">Dashboard Cidade na Mão</div>
     </div>
     <nav class="side-nav">
       <div class="side-item active" onclick="show(0)"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M104,40H56A16,16,0,0,0,40,56v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40Zm0,64H56V56h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,64H152V56h48v48Zm-96,32H56a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,104,136Zm0,64H56V152h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,200,136Zm0,64H152V152h48v48Z"/></svg><span>Visão Geral</span></div>
@@ -321,7 +323,7 @@ tfoot td { font-weight: 700; background: rgba(79,70,229,0.06); border-top: 1px s
     </nav>
     <div class="sidebar-foot">
       <div class="support"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm39.1,131.79a47.84,47.84,0,0,0,0-55.58l28.5-28.49a87.83,87.83,0,0,1,0,112.56ZM96,128a32,32,0,1,1,32,32A32,32,0,0,1,96,128Zm88.28-67.6L155.79,88.9a47.84,47.84,0,0,0-55.58,0L71.72,60.4a87.83,87.83,0,0,1,112.56,0ZM60.4,71.72l28.5,28.49a47.84,47.84,0,0,0,0,55.58L60.4,184.28a87.83,87.83,0,0,1,0-112.56ZM71.72,195.6l28.49-28.5a47.84,47.84,0,0,0,55.58,0l28.49,28.5a87.83,87.83,0,0,1-112.56,0Z"/></svg><span>Suporte SASI</span></div>
-      <div class="ver">SASI LDR Hub · v1.0.0<br>© 2026 SASI LTDA</div>
+      <div class="ver">Dashboard Cidade na Mão · v1.0.0<br>© 2026 SASI LTDA</div>
     </div>
   </aside>
 
