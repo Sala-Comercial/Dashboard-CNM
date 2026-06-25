@@ -60,13 +60,13 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; b
 .brand-tag { font-size: 7px; font-weight: 500; letter-spacing: 0.4px; color: #7e84a0; margin-top: 3px; }
 .brand-ldr { font-size: 11px; font-weight: 700; letter-spacing: 2.5px; color: #c2c7da; margin-top: 5px; }
 .side-nav { flex: 1; padding: 8px 14px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
-.side-item { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 12px; font-size: 14.5px; font-weight: 500; color: var(--sidebar-text); cursor: pointer; user-select: none; transition: background 0.15s, color 0.15s; white-space: nowrap; }
-.side-item svg { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.9; }
+.side-item { display: flex; align-items: center; gap: 13px; padding: 11px 14px; border-radius: 12px; font-size: 14px; font-weight: 400; letter-spacing: 0.1px; color: var(--sidebar-text); cursor: pointer; user-select: none; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+.side-item svg { width: 21px; height: 21px; flex-shrink: 0; opacity: 0.85; }
 .side-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
-.side-item.active { background: var(--side-active); color: #fff; font-weight: 600; box-shadow: 0 8px 18px rgba(91,84,232,0.40); }
+.side-item.active { background: var(--side-active); color: #fff; font-weight: 500; box-shadow: 0 8px 18px rgba(91,84,232,0.40); }
 .side-item.active svg { opacity: 1; }
 .sidebar-foot { padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); }
-.sidebar-foot .support { display: flex; align-items: center; gap: 14px; color: var(--sidebar-text); font-weight: 500; font-size: 14.5px; cursor: pointer; padding: 12px 14px; border-radius: 12px; transition: background 0.15s; }
+.sidebar-foot .support { display: flex; align-items: center; gap: 13px; color: var(--sidebar-text); font-weight: 400; letter-spacing: 0.1px; font-size: 14px; cursor: pointer; padding: 11px 14px; border-radius: 12px; transition: background 0.15s; }
 .sidebar-foot .support:hover { background: rgba(255,255,255,0.05); color: #fff; }
 .sidebar-foot .support svg { width: 20px; height: 20px; flex-shrink: 0; }
 .sidebar-foot .ver { font-size: 11px; color: var(--sidebar-muted); line-height: 1.7; padding: 14px 14px 4px; }
@@ -302,15 +302,15 @@ tfoot td { font-weight: 700; background: rgba(79,70,229,0.06); border-top: 1px s
       <div class="brand-ldr">LDR HUB</div>
     </div>
     <nav class="side-nav">
-      <div class="side-item active" onclick="show(0)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>Visão Geral</span></div>
-      <div class="side-item" onclick="show(1)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><span>Performance Pré-Venda</span></div>
-      <div class="side-item" onclick="show(2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg><span>Origem &amp; Segmentação</span></div>
-      <div class="side-item" onclick="show(3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span>Pipeline &amp; Receita</span></div>
-      <div class="side-item" onclick="show(4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg><span>Marketing</span></div>
-      <div class="side-item" onclick="show(5)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Metas</span></div>
+      <div class="side-item active" onclick="show(0)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>Visão Geral</span></div>
+      <div class="side-item" onclick="show(1)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><span>Performance Pré-Venda</span></div>
+      <div class="side-item" onclick="show(2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg><span>Origem &amp; Segmentação</span></div>
+      <div class="side-item" onclick="show(3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span>Pipeline &amp; Receita</span></div>
+      <div class="side-item" onclick="show(4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg><span>Marketing</span></div>
+      <div class="side-item" onclick="show(5)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Metas</span></div>
     </nav>
     <div class="sidebar-foot">
-      <div class="support"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Suporte SASI</span></div>
+      <div class="support"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Suporte SASI</span></div>
       <div class="ver">SASI LDR Hub · v1.0.0<br>© 2026 SASI LTDA</div>
     </div>
   </aside>
