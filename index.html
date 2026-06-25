@@ -124,13 +124,13 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; b
 .kpi-rate { font-size: 11px; font-weight: 700; margin-top: 6px; order: 3; }
 
 /* ── CARD ── */
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: auto; resize: both; min-width: 260px; min-height: 140px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; resize: both; min-width: 260px; min-height: 140px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); display: flex; flex-direction: column; }
 .card.dragging { opacity: 0.4; }
-.card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; cursor: grab; }
+.card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; cursor: grab; flex-shrink: 0; }
 .card-head:active { cursor: grabbing; }
 .card-title { font-size: 13px; font-weight: 700; color: var(--text); letter-spacing: 0; }
 .card-badge { font-size: 10px; font-weight: 600; color: var(--text-2); background: var(--surface2); border: 1px solid var(--border); padding: 3px 9px; border-radius: 6px; }
-.card-body { padding: 16px 18px; }
+.card-body { padding: 16px 18px; flex: 1 1 auto; min-height: 0; overflow: auto; }
 .layout-hint { font-size: 11px; color: var(--text-3); padding: 0 0 14px; }
 
 /* ── TABLE ── */
@@ -163,7 +163,7 @@ tfoot td { font-weight: 700; background: rgba(79,70,229,0.06); border-top: 1px s
 .ibar-pct { font-size: 11px; font-weight: 700; width: 40px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 
 /* ── FUNNEL ── */
-.funnel { padding: 16px; }
+.funnel { padding: 16px; flex: 1 1 auto; min-height: 0; overflow: auto; }
 .f-row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
 .f-label { width: 160px; font-size: 11px; color: var(--text-2); text-align: right; flex-shrink: 0; }
 .f-bar-bg { flex: 1; height: 32px; background: var(--surface2); border-radius: 4px; overflow: visible; position: relative; }
@@ -1635,7 +1635,7 @@ function renderD2(data) {
       <div class="card-title">Reuniões — Lista Completa</div>
       <div class="card-badge">${allMeetings.length} reuniões no total</div>
     </div>
-    <div class="card-body tbl-wrap">
+    <div class="card-body tbl-wrap" style="max-height:480px">
       ${allMeetings.length ? `
       <table>
         <thead><tr><th>Contato</th><th>Proprietário da Reunião</th><th>Desfecho</th><th>Data</th></tr></thead>
@@ -1817,7 +1817,7 @@ function renderD4(data) {
         </div>
       </div>
     </div>
-    <div class="card-body tbl-wrap">
+    <div class="card-body tbl-wrap" style="max-height:480px">
       ${dealsAbertos.length ? `
       <table>
         <thead><tr><th>Nome do negócio</th><th>Etapa</th><th>Instrumento de Contratação</th><th class="r">Valor (R$)</th><th>Previsão de Fechamento</th><th>Proprietário do negócio</th><th class="r">Atividades</th></tr></thead>
@@ -1849,7 +1849,7 @@ function renderD4(data) {
 
   <div class="card" data-card-id="d4-perdidos">
     <div class="card-head"><div class="card-title">Negócios Perdidos</div><div class="card-badge">${dealLink({dealStatus:'perdidos', title:'Negócios Perdidos'}, dealsPerdidos.length)}</div></div>
-    <div class="card-body tbl-wrap">
+    <div class="card-body tbl-wrap" style="max-height:480px">
       ${dealsPerdidos.length ? `
       <table>
         <thead><tr><th>Nome do negócio</th><th>Motivo do perdido</th><th class="r">Valor (R$)</th><th>Proprietário do negócio</th></tr></thead>
@@ -1969,7 +1969,7 @@ function renderD5(data) {
         <div class="card-badge">${numLink({origemIn:TARGET_ORIGINS, status:'leads', title:'Origens Consideradas'}, totalLeadsOrigens)} contatos</div>
       </div>
     </div>
-    <div class="card-body tbl-wrap" style="max-height:420px;overflow-y:auto">
+    <div class="card-body tbl-wrap" style="max-height:480px">
       ${totalLeadsOrigens ? `
       <table>
         <thead><tr><th>Nome do Contato</th><th>Origem</th><th>Região</th><th>Status</th></tr></thead>
