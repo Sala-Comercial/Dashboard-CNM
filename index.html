@@ -52,7 +52,7 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; b
 .app { display: flex; min-height: 100vh; }
 
 /* ── SIDEBAR ── */
-.sidebar { width: 256px; flex-shrink: 0; background: var(--sidebar); color: var(--sidebar-text); display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; z-index: 60; }
+.sidebar { width: 256px; flex-shrink: 0; background: var(--sidebar); color: var(--sidebar-text); display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; z-index: 60; transition: width 0.22s ease; }
 .brand { display: flex; align-items: flex-start; gap: 9px; padding: 22px 22px 14px; }
 .brand-lockup { display: flex; flex-direction: column; }
 .brand-word { position: relative; display: inline-flex; align-items: flex-start; font-size: 23px; font-weight: 800; color: #fff; letter-spacing: -0.5px; line-height: 1; }
@@ -72,10 +72,19 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; b
 .sidebar-foot .ver { font-size: 11px; color: var(--sidebar-muted); line-height: 1.7; padding: 14px 14px 4px; }
 
 /* ── MAIN ── */
-.main { flex: 1; margin-left: 256px; display: flex; flex-direction: column; min-width: 0; }
+.main { flex: 1; margin-left: 256px; display: flex; flex-direction: column; min-width: 0; transition: margin-left 0.22s ease; }
 
 /* ── TOPBAR ── */
 .topbar { background: var(--surface); border-bottom: 1px solid var(--border); min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 28px; position: sticky; top: 0; z-index: 50; flex-wrap: wrap; }
+.tb-left { display: flex; align-items: center; gap: 14px; }
+.sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); cursor: pointer; flex-shrink: 0; padding: 0; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+.sidebar-toggle:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+.sidebar-toggle svg { width: 20px; height: 20px; }
+.app.collapsed .sidebar { width: 66px; }
+.app.collapsed .main { margin-left: 66px; }
+.app.collapsed .brand { justify-content: center; padding: 18px 0; }
+.app.collapsed .brand-tag, .app.collapsed .brand-ldr, .app.collapsed .side-item span, .app.collapsed .sidebar-foot .support span, .app.collapsed .sidebar-foot .ver { display: none; }
+.app.collapsed .side-item, .app.collapsed .sidebar-foot .support { justify-content: center; padding: 11px; }
 .tb-left .crumb { font-size: 11.5px; color: var(--text-3); margin-bottom: 2px; }
 .tb-left .crumb b { color: var(--primary); font-weight: 700; }
 .tb-left h1 { font-size: 18px; font-weight: 800; color: var(--text); letter-spacing: -0.3px; }
@@ -319,8 +328,11 @@ tfoot td { font-weight: 700; background: rgba(79,70,229,0.06); border-top: 1px s
   <div class="main">
     <header class="topbar">
       <div class="tb-left">
-        <div class="crumb"><b>Console</b> › <span id="crumb-sec">Visão Geral</span></div>
-        <h1 id="page-title">Visão Geral</h1>
+        <button class="sidebar-toggle" onclick="toggleSidebar()" title="Recolher menu" aria-label="Recolher menu"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H80V200H40ZM216,200H96V56H216V200Z"/></svg></button>
+        <div class="tb-left-text">
+          <div class="crumb"><b>Console</b> › <span id="crumb-sec">Visão Geral</span></div>
+          <h1 id="page-title">Visão Geral</h1>
+        </div>
       </div>
       <div class="tb-right">
         <div class="chip" id="hdr-updated">Carregando…</div>
@@ -1085,6 +1097,21 @@ function dealLostReasonLabel(d) {
    TAB SWITCHING
 ════════════════════════════════════════════════════════════ */
 const SECTION_NAMES = ['Visão Geral','Performance Pré-Venda','Origem & Segmentação','Pipeline & Receita','Marketing','Metas'];
+function toggleSidebar() {
+  const app = document.querySelector('.app');
+  if (!app) return;
+  const collapsed = app.classList.toggle('collapsed');
+  try { localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0'); } catch (e) {}
+}
+(function restoreSidebar() {
+  try {
+    if (localStorage.getItem('sidebarCollapsed') === '1') {
+      const app = document.querySelector('.app');
+      if (app) app.classList.add('collapsed');
+    }
+  } catch (e) {}
+})();
+
 function show(i) {
   document.querySelectorAll('.page').forEach((p, idx) => p.classList.toggle('active', idx === i));
   document.querySelectorAll('.side-item').forEach((t, idx) => t.classList.toggle('active', idx === i));
