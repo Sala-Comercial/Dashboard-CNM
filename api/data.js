@@ -35,21 +35,33 @@ const DEAL_PROPS = [
 // Contatos de teste excluídos da contagem (mesma regra do buildLiveData).
 const TEST_CONTACT_NAMES = ['karol castilho'];
 
-// ── Chamada genérica ao HubSpot ──────────────────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ── Chamada genérica ao HubSpot, com retry/backoff em 429 e 5xx ──────
+// A Search API do HubSpot limita ~4 req/segundo; na rede rápida da Vercel
+// isso estoura fácil, então reexecutamos respeitando o Retry-After.
 async function hsFetch(token, path, options = {}) {
-  const res = await fetch(HUBSPOT_BASE + path, {
-    ...options,
-    headers: {
-      Authorization: 'Bearer ' + token,
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
+  const MAX_TRIES = 6;
+  for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+    const res = await fetch(HUBSPOT_BASE + path, {
+      ...options,
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+    if (res.ok) return res.json();
+
+    if ((res.status === 429 || res.status >= 500) && attempt < MAX_TRIES) {
+      const retryAfter = parseFloat(res.headers.get('Retry-After'));
+      const waitMs = !isNaN(retryAfter) ? retryAfter * 1000 : Math.min(1000 * attempt, 5000);
+      await sleep(waitMs);
+      continue;
     }
-  });
-  if (!res.ok) {
     const body = await res.text();
     throw new Error('HubSpot ' + res.status + ' em ' + path + ': ' + body.slice(0, 300));
   }
-  return res.json();
 }
 
 // ── Search paginado (CONTACT / DEAL) filtrando pela campanha ─────────
@@ -70,6 +82,7 @@ async function searchAll(token, objectType, properties) {
     (data.results || []).forEach(r => all.push({ id: String(r.id), properties: r.properties || {} }));
     after = data.paging && data.paging.next && data.paging.next.after;
     if (!after) break;
+    await sleep(260); // respeita o limite de ~4 buscas/segundo do HubSpot
   }
   return all;
 }
