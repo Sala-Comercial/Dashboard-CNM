@@ -2271,7 +2271,13 @@ async function init() {
     });
   }
   try {
-    const data = window.__CNM26_STATIC_DATA__ ? window.__CNM26_STATIC_DATA__ : await buildLiveData(setProgress);
+    setProgress('Carregando dados ao vivo do HubSpot…');
+    let data = await fetchApiData();
+    if (!data) {
+      // Fallback: snapshot embarcado, caso o endpoint /api/data esteja indisponível
+      // (ex.: HUBSPOT_TOKEN ainda não configurado na Vercel).
+      data = window.__CNM26_STATIC_DATA__;
+    }
     window.__dash = data; // referência global usada pelo drill-down (números clicáveis) em todas as abas
     renderD1(data);
     renderD2(data);
@@ -2295,75 +2301,50 @@ document.addEventListener('DOMContentLoaded', init);
 
 <script>
 /* ════════════════════════════════════════════════════════════
-   ATUALIZAÇÃO MANUAL AO VIVO (botão "Atualizar agora")
-   Aciona a função serverless do Netlify que busca dados frescos
-   no HubSpot e os grava no Netlify Blobs; depois consulta até
-   os dados ficarem disponíveis e redesenha o dashboard.
+   DADOS AO VIVO via /api/data (Vercel Serverless Function)
+   A função busca os dados frescos no HubSpot com o token guardado
+   em HUBSPOT_TOKEN e devolve o mesmo formato do snapshot. O cache
+   de borda da Vercel (~110s) protege o rate limit do HubSpot.
 ════════════════════════════════════════════════════════════ */
+async function fetchApiData() {
+  try {
+    const r = await fetch('/api/data', { cache: 'no-store' });
+    const json = await r.json();
+    if (json && json.available && json.data) return json.data;
+    if (json && json.status && json.status.ok === false) {
+      console.warn('/api/data indisponível:', json.status.error);
+    }
+    return null;
+  } catch (e) {
+    console.warn('Falha ao buscar /api/data:', e.message);
+    return null;
+  }
+}
+
+/* Botão "Atualizar agora" — busca o /api/data e redesenha. */
 async function refreshLiveData() {
   const btn = document.getElementById('btn-refresh');
-  const statusEl = document.getElementById('hdr-updated');
   if (btn.dataset.busy === '1') return;
   btn.dataset.busy = '1';
   const originalLabel = btn.textContent;
-  const prevStatus = statusEl.textContent;
   btn.textContent = 'Atualizando…';
   btn.disabled = true;
-  statusEl.textContent = 'Buscando dados no HubSpot…';
 
-  function finish(label, restoreStatus) {
+  function finish(label, restore) {
     btn.textContent = label;
     btn.disabled = false;
     btn.dataset.busy = '0';
-    if (restoreStatus) setTimeout(() => { btn.textContent = originalLabel; }, 3000);
+    if (restore) setTimeout(() => { btn.textContent = originalLabel; }, 3000);
   }
 
-  try {
-    await fetch('/.netlify/functions/refresh-data-background', { method: 'POST' });
-  } catch (e) {
-    console.error('Falha ao acionar atualização:', e);
-    statusEl.textContent = prevStatus;
+  const data = await fetchApiData();
+  if (data) {
+    applyLiveData(data);
+    finish('✓ Atualizado', true);
+  } else {
     finish(originalLabel, false);
-    alert('Não foi possível acionar a atualização. Verifique sua conexão e tente novamente.');
-    return;
+    alert('Não foi possível atualizar agora. Verifique se HUBSPOT_TOKEN está configurado nas variáveis de ambiente da Vercel e tente novamente.');
   }
-
-  const startedAt = Date.now();
-  const maxWaitMs = 6 * 60 * 1000; // 6 minutos
-  const pollIntervalMs = 5000;
-  const baselineFetchedAt = (window.__dash && window.__dash.fetchedAt) || null;
-
-  function poll() {
-    fetch('/.netlify/functions/get-data', { cache: 'no-store' })
-      .then(r => r.json())
-      .then(json => {
-        if (json && json.status && json.status.ok === false && (!json.data)) {
-          statusEl.textContent = prevStatus;
-          finish(originalLabel, false);
-          alert('A atualização falhou: ' + (json.status.error || 'erro desconhecido') + '\n\nVerifique se o token do HubSpot (HUBSPOT_TOKEN) está configurado nas variáveis de ambiente do Netlify.');
-          return;
-        }
-        const fresh = json && json.available && json.data && json.data.fetchedAt &&
-          (!baselineFetchedAt || new Date(json.data.fetchedAt) > new Date(baselineFetchedAt));
-        if (fresh) {
-          applyLiveData(json.data);
-          finish('✓ Atualizado', true);
-          return;
-        }
-        if (Date.now() - startedAt > maxWaitMs) {
-          statusEl.textContent = prevStatus;
-          finish(originalLabel, false);
-          alert('A atualização está demorando mais que o esperado. Os dados continuarão sendo buscados em segundo plano — recarregue a página em alguns minutos.');
-          return;
-        }
-        setTimeout(poll, pollIntervalMs);
-      })
-      .catch(err => {
-        console.error('Erro ao consultar dados atualizados:', err);
-        setTimeout(poll, pollIntervalMs);
-      });
-  }
-  setTimeout(poll, pollIntervalMs);
 }
 
 function applyLiveData(data) {
@@ -2383,48 +2364,22 @@ function applyLiveData(data) {
 
 /* ════════════════════════════════════════════════════════════
    AUTO-REFRESH A CADA 2 MINUTOS
-   Dispara silenciosamente em background: aciona o fetch do
-   HubSpot via função Netlify e aplica os dados assim que
-   ficarem disponíveis, sem travar a UI.
+   Re-busca /api/data silenciosamente e redesenha o dashboard,
+   sem travar a UI. Mantém a gestão vendo a produção quase em
+   tempo real. Não interfere se uma atualização manual estiver
+   em curso, nem com a aba em segundo plano.
 ════════════════════════════════════════════════════════════ */
 (function startAutoRefresh() {
   const INTERVAL_MS = 2 * 60 * 1000; // 2 minutos
-  const POLL_MS     = 5000;           // checa resultado a cada 5s
-  const MAX_WAIT_MS = 5 * 60 * 1000; // desiste após 5 min
 
   async function silentRefresh() {
-    // Não aciona se já houver uma atualização manual em curso
     const btn = document.getElementById('btn-refresh');
-    if (btn && btn.dataset.busy === '1') return;
-
-    let baseline = (window.__dash && window.__dash.fetchedAt) || null;
-
-    try {
-      await fetch('/.netlify/functions/refresh-data-background', { method: 'POST' });
-    } catch (e) {
-      return; // sem rede — tenta na próxima rodada
-    }
-
-    const startedAt = Date.now();
-    function poll() {
-      if (Date.now() - startedAt > MAX_WAIT_MS) return;
-      fetch('/.netlify/functions/get-data', { cache: 'no-store' })
-        .then(r => r.json())
-        .then(json => {
-          const fresh = json && json.available && json.data && json.data.fetchedAt &&
-            (!baseline || new Date(json.data.fetchedAt) > new Date(baseline));
-          if (fresh) {
-            applyLiveData(json.data);
-          } else {
-            setTimeout(poll, POLL_MS);
-          }
-        })
-        .catch(() => setTimeout(poll, POLL_MS));
-    }
-    setTimeout(poll, POLL_MS);
+    if (btn && btn.dataset.busy === '1') return;        // atualização manual em curso
+    if (document.hidden) return;                         // aba em segundo plano — pula
+    const data = await fetchApiData();
+    if (data) applyLiveData(data);
   }
 
-  // Aguarda a inicialização antes de começar o ciclo
   document.addEventListener('DOMContentLoaded', () => {
     setInterval(silentRefresh, INTERVAL_MS);
   });
