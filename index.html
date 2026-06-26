@@ -2380,6 +2380,55 @@ function applyLiveData(data) {
     : new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
   document.getElementById('hdr-updated').textContent = 'Atualizado ' + updatedLabel;
 }
+
+/* ════════════════════════════════════════════════════════════
+   AUTO-REFRESH A CADA 2 MINUTOS
+   Dispara silenciosamente em background: aciona o fetch do
+   HubSpot via função Netlify e aplica os dados assim que
+   ficarem disponíveis, sem travar a UI.
+════════════════════════════════════════════════════════════ */
+(function startAutoRefresh() {
+  const INTERVAL_MS = 2 * 60 * 1000; // 2 minutos
+  const POLL_MS     = 5000;           // checa resultado a cada 5s
+  const MAX_WAIT_MS = 5 * 60 * 1000; // desiste após 5 min
+
+  async function silentRefresh() {
+    // Não aciona se já houver uma atualização manual em curso
+    const btn = document.getElementById('btn-refresh');
+    if (btn && btn.dataset.busy === '1') return;
+
+    let baseline = (window.__dash && window.__dash.fetchedAt) || null;
+
+    try {
+      await fetch('/.netlify/functions/refresh-data-background', { method: 'POST' });
+    } catch (e) {
+      return; // sem rede — tenta na próxima rodada
+    }
+
+    const startedAt = Date.now();
+    function poll() {
+      if (Date.now() - startedAt > MAX_WAIT_MS) return;
+      fetch('/.netlify/functions/get-data', { cache: 'no-store' })
+        .then(r => r.json())
+        .then(json => {
+          const fresh = json && json.available && json.data && json.data.fetchedAt &&
+            (!baseline || new Date(json.data.fetchedAt) > new Date(baseline));
+          if (fresh) {
+            applyLiveData(json.data);
+          } else {
+            setTimeout(poll, POLL_MS);
+          }
+        })
+        .catch(() => setTimeout(poll, POLL_MS));
+    }
+    setTimeout(poll, POLL_MS);
+  }
+
+  // Aguarda a inicialização antes de começar o ciclo
+  document.addEventListener('DOMContentLoaded', () => {
+    setInterval(silentRefresh, INTERVAL_MS);
+  });
+})();
 </script>
 </body>
 </html>
