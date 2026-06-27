@@ -290,9 +290,11 @@ export default async function handler(req, res) {
       fetchedAt: new Date().toISOString()
     };
 
-    // Cache de borda da Vercel ~110s → o auto-refresh de 2 min não
-    // martela o HubSpot e respeita o rate limit da API.
-    res.setHeader('Cache-Control', 's-maxage=110, stale-while-revalidate=300');
+    // Cache de borda da Vercel alinhado ao auto-refresh de 2 min. O
+    // stale-while-revalidate longo faz a borda servir a resposta na hora
+    // (instantânea) enquanto revalida o HubSpot em segundo plano — assim o
+    // carregamento repetido não espera a busca completa na API.
+    res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
     res.status(200).json({ available: true, status: { ok: true }, data });
   } catch (err) {
     res.status(200).json({

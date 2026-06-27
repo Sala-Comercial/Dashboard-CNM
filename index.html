@@ -101,6 +101,9 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; b
 /* ── CHIP ── */
 .chip { font-size: 11px; font-weight: 600; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); color: var(--text-2); background: var(--surface2); letter-spacing: 0.2px; white-space: nowrap; }
 .chip-blue { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
+.chip-updating { color: var(--primary); border-color: rgba(79,70,229,0.35); background: rgba(79,70,229,0.07); }
+.upd-spin { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; border: 2px solid rgba(79,70,229,0.25); border-top-color: var(--primary); border-radius: 50%; animation: updspin 0.7s linear infinite; }
+@keyframes updspin { to { transform: rotate(360deg); } }
 
 /* ── CONTENT ── */
 .content { padding: 22px 28px; flex: 1; }
@@ -2268,29 +2271,49 @@ async function init() {
       if (el && el.classList.contains('loading-box')) el.textContent = msg;
     });
   }
-  try {
+  // 1) Mostra IMEDIATAMENTE os dados já salvos no sistema (snapshot embarcado),
+  //    para a tela nunca ficar vazia enquanto o HubSpot responde.
+  let hasData = false;
+  const snapshot = window.__CNM26_STATIC_DATA__;
+  if (snapshot) {
+    try {
+      window.__dash = snapshot;
+      renderD1(snapshot); renderD2(snapshot); renderD3(snapshot);
+      renderD4(snapshot); renderD5(snapshot); renderD6(snapshot);
+      hasData = true;
+    } catch (e) { console.warn('Falha ao desenhar dados salvos:', e); }
+  } else {
     setProgress('Carregando dados ao vivo do HubSpot…');
-    let data = await fetchApiData();
-    if (!data) {
-      // Fallback: snapshot embarcado, caso o endpoint /api/data esteja indisponível
-      // (ex.: HUBSPOT_TOKEN ainda não configurado na Vercel).
-      data = window.__CNM26_STATIC_DATA__;
+  }
+
+  // 2) Busca os dados frescos do HubSpot em segundo plano e troca quando chegarem.
+  setUpdatingIndicator(true);
+  try {
+    const live = await fetchApiData();
+    if (live) {
+      applyLiveData(live); // troca pelos dados ao vivo e carimba a hora
+    } else if (!hasData) {
+      allRoots.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<div class="alert a-red">Não foi possível carregar os dados do HubSpot. Recarregue a página para tentar novamente.</div>';
+      });
+      document.getElementById('hdr-updated').textContent = 'Erro ao carregar';
+    } else {
+      setUpdatingIndicator(false); // mantém os dados salvos na tela
+      document.getElementById('hdr-updated').textContent = 'Dados salvos · atualização indisponível';
     }
-    window.__dash = data; // referência global usada pelo drill-down (números clicáveis) em todas as abas
-    renderD1(data);
-    renderD2(data);
-    renderD3(data);
-    renderD4(data);
-    renderD5(data);
-    renderD6(data);
-    document.getElementById('hdr-updated').textContent = 'Atualizado ' + new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
   } catch (err) {
     console.error(err);
-    allRoots.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = '<div class="alert a-red">Não foi possível carregar os dados ao vivo do HubSpot: ' + esc(err.message) + '. Recarregue a página para tentar novamente.</div>';
-    });
-    document.getElementById('hdr-updated').textContent = 'Erro ao carregar';
+    setUpdatingIndicator(false);
+    if (!hasData) {
+      allRoots.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<div class="alert a-red">Não foi possível carregar os dados do HubSpot: ' + esc(err.message) + '.</div>';
+      });
+      document.getElementById('hdr-updated').textContent = 'Erro ao carregar';
+    } else {
+      document.getElementById('hdr-updated').textContent = 'Dados salvos · atualização indisponível';
+    }
   }
 }
 
@@ -2327,6 +2350,7 @@ async function refreshLiveData() {
   const originalLabel = btn.textContent;
   btn.textContent = 'Atualizando…';
   btn.disabled = true;
+  setUpdatingIndicator(true);
 
   function finish(label, restore) {
     btn.textContent = label;
@@ -2340,8 +2364,21 @@ async function refreshLiveData() {
     applyLiveData(data);
     finish('✓ Atualizado', true);
   } else {
+    setUpdatingIndicator(false);
     finish(originalLabel, false);
     alert('Não foi possível atualizar agora. Verifique se HUBSPOT_TOKEN está configurado nas variáveis de ambiente da Vercel e tente novamente.');
+  }
+}
+
+/* Indicador "Atualizando…" (com spinner) no chip do cabeçalho. */
+function setUpdatingIndicator(on) {
+  const chip = document.getElementById('hdr-updated');
+  if (!chip) return;
+  if (on) {
+    chip.classList.add('chip-updating');
+    chip.innerHTML = '<span class="upd-spin"></span>Atualizando…';
+  } else {
+    chip.classList.remove('chip-updating');
   }
 }
 
@@ -2357,6 +2394,7 @@ function applyLiveData(data) {
   const updatedLabel = data.fetchedAt
     ? new Date(data.fetchedAt).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
     : new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  setUpdatingIndicator(false);
   document.getElementById('hdr-updated').textContent = 'Atualizado ' + updatedLabel;
 }
 
@@ -2374,8 +2412,10 @@ function applyLiveData(data) {
     const btn = document.getElementById('btn-refresh');
     if (btn && btn.dataset.busy === '1') return;        // atualização manual em curso
     if (document.hidden) return;                         // aba em segundo plano — pula
+    setUpdatingIndicator(true);
     const data = await fetchApiData();
     if (data) applyLiveData(data);
+    else setUpdatingIndicator(false);
   }
 
   document.addEventListener('DOMContentLoaded', () => {
