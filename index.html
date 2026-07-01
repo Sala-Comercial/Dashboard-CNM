@@ -841,11 +841,19 @@ function buildStageIndex(pipelines) {
   });
   return map;
 }
-function dealStageLabel(raw) {
+// Etapa e pipeline separados (para exibições que mostram cada um em seu
+// próprio lugar — coluna própria na tabela, ou linha menor abaixo do nome
+// da etapa no funil). pipeline vem null quando a etapa não está no índice
+// (fallback ao mapa fixo, sem informação de pipeline).
+function dealStageParts(raw) {
   const key = String(raw == null ? '' : raw).trim();
   const info = STAGE_INDEX[key];
-  if (info) return info.stageLabel + (info.pipelineLabel ? ' (' + info.pipelineLabel + ')' : '');
-  return DEAL_STAGE_LABELS[key] || cleanLabel(raw) || 'Sem etapa';
+  if (info) return { stage: info.stageLabel, pipeline: info.pipelineLabel };
+  return { stage: DEAL_STAGE_LABELS[key] || cleanLabel(raw) || 'Sem etapa', pipeline: null };
+}
+function dealStageLabel(raw) {
+  const { stage, pipeline } = dealStageParts(raw);
+  return stage + (pipeline ? ' (' + pipeline + ')' : '');
 }
 // Chave de ordenação (pipeline, depois etapa) — usada para exibir o funil e
 // o pipeline de negócios na ordem real das pipelines, em vez de por contagem.
@@ -1129,20 +1137,23 @@ function buildDealFunnelHtml(deals) {
   dealsAbertos.forEach(d => {
     const raw = d.properties && d.properties.dealstage;
     const label = dealStageLabel(raw);
-    if (!stageMap[label]) stageMap[label] = { count: 0, value: 0, sortKey: dealStageSortKey(raw) };
+    if (!stageMap[label]) {
+      const { stage, pipeline } = dealStageParts(raw);
+      stageMap[label] = { count: 0, value: 0, sortKey: dealStageSortKey(raw), stage, pipeline };
+    }
     stageMap[label].count++;
     stageMap[label].value += Number(d.properties && d.properties.amount) || 0;
   });
   // Ordem das pipelines/etapas (não por contagem) — cada etapa aparece como
   // "Nome da Etapa (Nome da Pipeline)", na ordem real configurada no HubSpot.
   const stageRows = Object.entries(stageMap).sort((a,b) => compareStageKeys(a[1].sortKey, b[1].sortKey));
-  const dealFunnelRows = stageRows.map(([label, v]) => ({ label, count: v.count, value: v.value, pct: pctNum(v.count, deals.length) }));
+  const dealFunnelRows = stageRows.map(([label, v]) => ({ label, stage: v.stage, pipeline: v.pipeline, count: v.count, value: v.value, pct: pctNum(v.count, deals.length) }));
   const pctPerdidos = pctNum(dealsPerdidos.length, deals.length);
 
   const html = `
     ${dealFunnelRows.length ? dealFunnelRows.map(r => `
     <div class="f-row">
-      <div class="f-label">${esc(r.label)}</div>
+      <div class="f-label"><div>${esc(r.stage)}</div>${r.pipeline ? `<div style="font-size:9px;font-weight:400;color:var(--text-3);margin-top:1px">${esc(r.pipeline)}</div>` : ''}</div>
       <div class="f-bar-bg" style="position:relative"><div class="f-bar" style="width:${Math.max(r.pct,2).toFixed(1)}%;background:var(--navy)"></div><span style="position:absolute;left:calc(${Math.max(r.pct,2).toFixed(1)}% + 4px);top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;color:var(--navy)">${r.count}</span></div>
       <div class="f-count">${dealLink({stage:r.label, title:r.label}, r.count)}</div>
       <div class="f-pct">${r.pct.toFixed(1)}%<br><span style="font-size:9px;color:var(--text-3)">${r.value ? fmtMoney(r.value) : 'sem valor'}</span></div>
@@ -1255,7 +1266,10 @@ function renderD1(data) {
   dealsAbertos.forEach(d => {
     const raw = d.properties && d.properties.dealstage;
     const label = dealStageLabel(raw);
-    if (!stageMap[label]) stageMap[label] = { count: 0, value: 0, sortKey: dealStageSortKey(raw) };
+    if (!stageMap[label]) {
+      const { stage, pipeline } = dealStageParts(raw);
+      stageMap[label] = { count: 0, value: 0, sortKey: dealStageSortKey(raw), stage, pipeline };
+    }
     stageMap[label].count++;
     stageMap[label].value += Number(d.properties && d.properties.amount) || 0;
   });
@@ -1349,12 +1363,12 @@ const meetingsNote = mstats.available
       </div>
       <div class="card-body tbl-wrap">
         <table>
-          <thead><tr><th>Etapa do negócio</th><th class="r">Quantidade</th><th class="r">Valor estimado</th></tr></thead>
+          <thead><tr><th>Pipeline</th><th>Etapa</th><th class="r">Quantidade</th><th class="r">Valor estimado</th></tr></thead>
           <tbody>
-            ${stageRows.length ? stageRows.map(([label, v]) => `<tr><td class="tname">${esc(label)}</td><td class="r">${dealLink({stage:label, title:label}, v.count)}</td><td class="r">${v.value ? fmtMoney(v.value) : '—'}</td></tr>`).join('') : '<tr><td colspan="3"><div class="empty-box">Nenhum negócio aberto registrado para esta campanha.</div></td></tr>'}
-            ${dealsPerdidos.length ? `<tr><td class="tname" style="color:var(--text-3)">Encerrados sem êxito</td><td class="r">${dealLink({dealStatus:'perdidos', title:'Negócios Perdidos'}, dealsPerdidos.length)}</td><td class="r">—</td></tr>` : ''}
+            ${stageRows.length ? stageRows.map(([label, v]) => `<tr><td>${esc(v.pipeline || '—')}</td><td class="tname">${esc(v.stage)}</td><td class="r">${dealLink({stage:label, title:label}, v.count)}</td><td class="r">${v.value ? fmtMoney(v.value) : '—'}</td></tr>`).join('') : '<tr><td colspan="4"><div class="empty-box">Nenhum negócio aberto registrado para esta campanha.</div></td></tr>'}
+            ${dealsPerdidos.length ? `<tr><td>—</td><td class="tname" style="color:var(--text-3)">Encerrados sem êxito</td><td class="r">${dealLink({dealStatus:'perdidos', title:'Negócios Perdidos'}, dealsPerdidos.length)}</td><td class="r">—</td></tr>` : ''}
           </tbody>
-          <tfoot><tr><td>Total</td><td class="r">${dealLink({title:'Total de Negócios'}, deals.length)}</td><td class="r">${dealsComValor.length ? fmtMoney(pipelineValor) : 'não informado'}</td></tr></tfoot>
+          <tfoot><tr><td colspan="2">Total</td><td class="r">${dealLink({title:'Total de Negócios'}, deals.length)}</td><td class="r">${dealsComValor.length ? fmtMoney(pipelineValor) : 'não informado'}</td></tr></tfoot>
         </table>
       </div>
     </div>
