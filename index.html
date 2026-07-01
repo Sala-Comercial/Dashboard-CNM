@@ -223,6 +223,16 @@ tfoot td { font-weight: 700; background: rgba(79,70,229,0.06); border-top: 1px s
 .meta-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-2); }
 .meta-bg[data-tip-html] { cursor: help; }
 
+/* ── CELEBRAÇÃO: confete no nome de quem bate as duas metas (Qualificados
+   e Reuniões) no período selecionado, na aba Metas. ── */
+.meta-hit { position: relative; display: inline-block; }
+.meta-hit .confetti-piece { position: absolute; top: 50%; left: 50%; width: 5px; height: 8px; opacity: 0; pointer-events: none; border-radius: 1px; animation: confetti-burst 1.8s ease-out infinite; }
+@keyframes confetti-burst {
+  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(0deg) scale(0.6); }
+  12%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) rotate(var(--rot)) scale(1); }
+}
+
 /* ── TOOLTIP genérico (hover), usado nas barras de Metas ── */
 .cnm-tip { position: fixed; z-index: 9999; display: none; background: #1a1f37; color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 11px; line-height: 1.5; pointer-events: none; max-width: 260px; box-shadow: 0 6px 20px rgba(0,0,0,0.28); }
 .cnm-tip strong { display: block; margin-bottom: 4px; font-size: 11px; }
@@ -468,7 +478,28 @@ function metaBarColor(pct) {
   return 'var(--red)';
 }
 function metaBarStarHtml(pct) {
-  return pct >= 99 ? '<span style="position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:10px;line-height:1">★</span>' : '';
+  return pct >= 99 ? '<span style="position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:12px;line-height:1;color:#FFD700;text-shadow:0 0 3px rgba(0,0,0,0.35)">★</span>' : '';
+}
+
+// ── Celebração: confete em volta do nome de quem bateu as duas metas
+// (Qualificados e Reuniões) da quinzena/período selecionado na aba Metas.
+const CONFETTI_COLORS = ['#FFD700', '#FF6B6B', '#4ECDC4', '#95E06C', '#FFA94D', '#748FFC'];
+function confettiPiecesHtml() {
+  let html = '';
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * 2 * Math.PI + (Math.random() * 0.5 - 0.25);
+    const dist = 20 + Math.random() * 14;
+    const tx = Math.round(Math.cos(angle) * dist);
+    const ty = Math.round(Math.sin(angle) * dist - 6);
+    const rot = Math.round(Math.random() * 360);
+    const color = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+    const delay = (Math.random() * 1.6).toFixed(2);
+    html += `<span class="confetti-piece" style="--tx:${tx}px;--ty:${ty}px;--rot:${rot}deg;background:${color};animation-delay:${delay}s"></span>`;
+  }
+  return html;
+}
+function metaHitName(name) {
+  return `<span class="meta-hit">${esc(name)}${confettiPiecesHtml()}</span>`;
 }
 function fmtMoney(v) { const n = Number(v); if (!v || isNaN(n) || n === 0) return null; return 'R$ ' + n.toLocaleString('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:0}); }
 function fmtPct(num, den) { if (!den) return '0,0%'; return (num/den*100).toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1}) + '%'; }
@@ -2117,7 +2148,7 @@ function applyD6Filter() {
   if (tbody) {
     tbody.innerHTML = rows.length ? rows.map(r => `
     <tr>
-      <td class="tname">${esc(r.name)}</td>
+      <td class="tname">${r.faltaQ === 0 && r.faltaR === 0 ? metaHitName(r.name) : esc(r.name)}</td>
       <td style="min-width:170px">
         <div class="meta-bg" style="position:relative" data-tip-html="${encodeURIComponent(buildQuinzenaTipHtml(r.name, metas, qIds, 'qualificados', 'Qualificados'))}"><div class="meta-fill" style="width:${r.pctQ.toFixed(0)}%;background:${metaBarColor(r.pctQ)}"></div>${metaBarStarHtml(r.pctQ)}</div>
         <div class="meta-labels"><span>${numLink({owners:[r.name], quinzenaIds:qIds, status:'qualificados', title:r.name}, r.qualificados)} / ${r.metaQ}</span><span>${r.faltaQ===0?'meta atingida':'faltam '+r.faltaQ}</span></div>
@@ -2141,7 +2172,7 @@ function applyD6Filter() {
     rankBox.innerHTML = ranking.length ? ranking.map((r, idx) => `
     <div class="st-row">
       <div class="rank ${idx===0?'rk1':idx===1?'rk2':idx===2?'rk3':'rk-n'}">${idx+1}</div>
-      <div class="st-name"><strong>${esc(r.name)}</strong><br><span style="font-size:10px;color:var(--text-3)">${numLink({owners:[r.name], quinzenaIds:qIds, status:'qualificados', title:r.name}, r.qualificados)}/${r.metaQ} qualificados · ${numLink({owners:[r.name], quinzenaIds:qIds, status:'agendadas', ownerByMeeting:true, title:r.name}, r.agendadas)}/${r.metaR} reuniões agendadas</span></div>
+      <div class="st-name"><strong>${r.faltaQ === 0 && r.faltaR === 0 ? metaHitName(r.name) : esc(r.name)}</strong><br><span style="font-size:10px;color:var(--text-3)">${numLink({owners:[r.name], quinzenaIds:qIds, status:'qualificados', title:r.name}, r.qualificados)}/${r.metaQ} qualificados · ${numLink({owners:[r.name], quinzenaIds:qIds, status:'agendadas', ownerByMeeting:true, title:r.name}, r.agendadas)}/${r.metaR} reuniões agendadas</span></div>
       <div class="st-val" style="color:${r.score>=100?'var(--green)':'var(--navy)'}">${r.score.toFixed(0)}% da meta</div>
     </div>`).join('') : '<div class="empty-box">Sem dados para o período selecionado.</div>';
   }
