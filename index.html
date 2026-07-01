@@ -981,7 +981,7 @@ function meetingsStats(meetings) {
     const label = MEETING_OUTCOME_MAP[code] || (code ? code : 'Sem desfecho');
     if (label === 'Agendada' || label === 'Realizada') agendadas++;
     if (label === 'Realizada') concluidas++;
-    return { contactId: r.hs_object_id, ownerId: r.hubspot_owner_id, outcome: label, startTime: r.hs_meeting_start_time };
+    return { contactId: r.hs_object_id, ownerId: r.hubspot_owner_id, outcome: label, startTime: r.hs_meeting_start_time, createdAt: r.hs_createdate };
   });
   return { available: true, agendadas, concluidas, rows };
 }
@@ -1338,6 +1338,9 @@ const meetingsNote = mstats.available
    RENDER — D2 PERFORMANCE DA EQUIPE
 ════════════════════════════════════════════════════════════ */
 const PRE_VENDEDORES = ["Tayane Cristina Lopes Ferreira","Igor Cañizo Melo Dantas","Macley da Costa Polezi","Miriam Maciel","Hanny Mendonça","Ariela Salgado"];
+// Ariela Salgado não entra na aba Metas (não é cobrada por meta de quinzena),
+// mas continua aparecendo normalmente em Performance da Equipe (D2).
+const PRE_VENDEDORES_METAS = PRE_VENDEDORES.filter(n => n !== "Ariela Salgado");
 
 function buildOwnerStats(data) {
   const mstats = meetingsStats(data.meetings);
@@ -1930,7 +1933,11 @@ function buildMetasData(data) {
   mstats.rows.forEach(r => {
     if (r.outcome !== 'Agendada' && r.outcome !== 'Realizada') return;
     const owner = ownerName(r.ownerId, data.owners);
-    const q = findQuinzena(quinzenas, parseHsDate(r.startTime));
+    // Metas encaixa a reunião na quinzena em que ela foi CRIADA no HubSpot
+    // (hs_createdate), não na quinzena da data agendada (startTime) — é a
+    // atividade de agendar que conta para a meta do período, não a data
+    // futura em que a reunião vai acontecer.
+    const q = findQuinzena(quinzenas, parseHsDate(r.createdAt));
     if (!q) return;
     cell(owner, q.id).agendadas++;
   });
@@ -1962,7 +1969,7 @@ function renderD6(data) {
           <div class="ms-panel">
             <div class="ms-opt"><input type="checkbox" checked onchange="onMsAll(this,'ms-d6-owner', applyD6Filter)"><span>Selecionar todos</span></div>
             <div class="ms-sep"></div>
-            ${PRE_VENDEDORES.map(n => `<div class="ms-opt"><input type="checkbox" checked value="${esc(n)}" onchange="onMsChange('ms-d6-owner', applyD6Filter)"><span>${esc(n)}</span></div>`).join('')}
+            ${PRE_VENDEDORES_METAS.map(n => `<div class="ms-opt"><input type="checkbox" checked value="${esc(n)}" onchange="onMsChange('ms-d6-owner', applyD6Filter)"><span>${esc(n)}</span></div>`).join('')}
           </div>
         </div>
         <div class="ms-dropdown" id="ms-d6-quinzena">
@@ -2085,7 +2092,7 @@ function applyD6Filter() {
   updateMsLabel('ms-d6-owner', 'Todos');
   updateMsLabel('ms-d6-quinzena', 'Quinzena atual');
 
-  const owners = selOwners.length ? selOwners : PRE_VENDEDORES;
+  const owners = selOwners.length ? selOwners : PRE_VENDEDORES_METAS;
   const qIds = selQuinzenas.length ? selQuinzenas : metas.quinzenas.map(q => q.id);
   const nPeriodos = Math.max(1, qIds.length);
   const metaQ = META_QUALIFICADOS_POR_QUINZENA * nPeriodos;

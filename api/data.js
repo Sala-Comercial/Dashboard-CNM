@@ -152,13 +152,16 @@ async function batchReadObjects(token, objectType, ids, properties) {
    uma linha por par contato↔reunião no mesmo shape que meetingsStats lê:
    { hs_object_id (contato), hubspot_owner_id (dono da reunião),
      hs_meeting_outcome (código cru — extractOutcomeCode resolve),
-     hs_meeting_start_time }. */
+     hs_meeting_start_time (quando a reunião acontece/aconteceu),
+     hs_createdate (quando o registro da reunião foi criado no HubSpot —
+     é essa data que a aba Metas usa para encaixar a reunião na quinzena,
+     não a data agendada). */
 async function fetchMeetings(token, contactIds) {
   const assoc = await batchReadAssociations(token, 'contacts', 'meetings', contactIds);
   const allMeetingIds = [...new Set(Object.values(assoc).flat())];
   if (!allMeetingIds.length) return [];
   const meetingMap = await batchReadObjects(token, 'meetings', allMeetingIds,
-    ['hs_meeting_outcome', 'hs_meeting_start_time', 'hubspot_owner_id']);
+    ['hs_meeting_outcome', 'hs_meeting_start_time', 'hubspot_owner_id', 'hs_createdate']);
   const rows = [];
   Object.keys(assoc).forEach(contactId => {
     assoc[contactId].forEach(meetingId => {
@@ -168,7 +171,8 @@ async function fetchMeetings(token, contactIds) {
         hs_object_id: contactId,
         hubspot_owner_id: m.properties.hubspot_owner_id || '',
         hs_meeting_outcome: m.properties.hs_meeting_outcome || '',
-        hs_meeting_start_time: m.properties.hs_meeting_start_time || ''
+        hs_meeting_start_time: m.properties.hs_meeting_start_time || '',
+        hs_createdate: m.properties.hs_createdate || ''
       });
     });
   });
