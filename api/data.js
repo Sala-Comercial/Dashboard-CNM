@@ -242,6 +242,13 @@ function groupBy2(contacts, propA, propB) {
 
 // ── Handler ──────────────────────────────────────────────────────────
 export default async function handler(req, res) {
+  // O botão "Atualizar agora" do dashboard manda ?fresh=1 para forçar uma
+  // busca de verdade no HubSpot, ignorando o cache de borda da Vercel abaixo.
+  // Sem isso, um clique dentro da janela de cache (s-maxage/stale-while-
+  // revalidate) devolvia uma resposta antiga sem a função sequer rodar de
+  // novo — o usuário via "Atualizado" mas os dados continuavam velhos.
+  const forceFresh = String((req.query && req.query.fresh) || '') === '1';
+
   const token = process.env.HUBSPOT_TOKEN;
   if (!token) {
     res.status(200).json({
@@ -264,18 +271,23 @@ export default async function handler(req, res) {
     // Fase 2: reuniões (por contato) e atividades (por negócio) via Associations API.
     // Em caso de falha pontual, meetings cai para null (a UI já trata "indisponível").
     let meetings = null;
+    let meetingsError = null;
     try {
       meetings = await fetchMeetings(token, contacts.map(c => c.id));
     } catch (e) {
+      meetingsError = e.message;
       console.warn('Falha ao buscar reuniões:', e.message);
     }
     let dealActivities = {};
+    let dealActivitiesError = null;
     try {
       dealActivities = await fetchDealActivities(token, deals.map(d => d.id));
     } catch (e) {
+      dealActivitiesError = e.message;
       console.warn('Falha ao buscar atividades de negócios:', e.message);
     }
 
+    const fetchedAt = new Date().toISOString();
     const data = {
       contacts,
       owners,
@@ -287,14 +299,36 @@ export default async function handler(req, res) {
       unqualByReason: groupBy1(contacts, 'unqualified_reason'),
       origemConectado: groupBy2(contacts, 'origem_do_contato', 'conectado_'),
       regiaoConectado: groupBy2(contacts, 'regiao', 'conectado_'),
-      fetchedAt: new Date().toISOString()
+      fetchedAt,
+      // Rastreabilidade da sincronização: permite a UI mostrar com confiança
+      // que o clique em "Atualizar agora" realmente foi buscar no HubSpot
+      // (e não uma resposta antiga do cache de borda), com contagens e
+      // eventuais falhas parciais de cada etapa da busca.
+      sync: {
+        forced: forceFresh,
+        fetchedAt,
+        contactsCount: contacts.length,
+        ownersCount: Object.keys(owners).length,
+        dealsCount: deals.length,
+        meetingsCount: meetings ? meetings.length : null,
+        meetingsOk: meetingsError === null,
+        meetingsError,
+        dealActivitiesOk: dealActivitiesError === null,
+        dealActivitiesError
+      }
     };
 
     // Cache de borda da Vercel alinhado ao auto-refresh de 2 min. O
     // stale-while-revalidate longo faz a borda servir a resposta na hora
     // (instantânea) enquanto revalida o HubSpot em segundo plano — assim o
-    // carregamento repetido não espera a busca completa na API.
-    res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
+    // carregamento repetido não espera a busca completa na API. Quando o
+    // pedido vem com ?fresh=1 (botão "Atualizar agora"), pulamos esse cache
+    // para garantir uma busca de verdade no HubSpot a cada clique.
+    if (forceFresh) {
+      res.setHeader('Cache-Control', 'no-store');
+    } else {
+      res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
+    }
     res.status(200).json({ available: true, status: { ok: true }, data });
   } catch (err) {
     res.status(200).json({

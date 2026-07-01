@@ -221,6 +221,22 @@ tfoot td { font-weight: 700; background: rgba(79,70,229,0.06); border-top: 1px s
 .meta-bg { background: var(--surface2); border-radius: 4px; height: 12px; overflow: hidden; margin: 8px 0; }
 .meta-fill { height: 100%; background: var(--green); border-radius: 4px; }
 .meta-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-2); }
+.meta-bg[data-tip-html] { cursor: help; }
+
+/* ── TOOLTIP genérico (hover), usado nas barras de Metas ── */
+.cnm-tip { position: fixed; z-index: 9999; display: none; background: #1a1f37; color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 11px; line-height: 1.5; pointer-events: none; max-width: 260px; box-shadow: 0 6px 20px rgba(0,0,0,0.28); }
+.cnm-tip strong { display: block; margin-bottom: 4px; font-size: 11px; }
+.cnm-tip table { width: 100%; font-size: 10px; border-collapse: collapse; }
+.cnm-tip td { padding: 1px 0; border: none; color: #fff; }
+.cnm-tip td.r { text-align: right; font-weight: 700; padding-left: 10px; }
+.cnm-tip .tip-total td { border-top: 1px solid rgba(255,255,255,0.25); padding-top: 3px; margin-top: 2px; font-weight: 700; }
+
+/* ── COMPARATIVO ENTRE QUINZENAS (Metas) ── */
+.qz-cell { text-align: center; white-space: nowrap; }
+.qz-trend { font-size: 10px; font-weight: 700; margin-top: 2px; }
+.qz-trend.up { color: var(--green); }
+.qz-trend.down { color: var(--red); }
+.qz-trend.flat { color: var(--text-3); }
 
 /* ── PIPELINE CARDS ── */
 .pipe-cards { display: grid; grid-template-columns: repeat(6,1fr); gap: 10px; margin-bottom: 16px; }
@@ -304,6 +320,9 @@ tfoot td { font-weight: 700; background: rgba(79,70,229,0.06); border-top: 1px s
   </div>
 </div>
 
+<!-- TOOLTIP genérico (hover), usado nas barras da página de Metas -->
+<div class="cnm-tip" id="cnm-tip"></div>
+
 <div class="app">
 
   <!-- SIDEBAR -->
@@ -370,11 +389,6 @@ window.__CNM26_STATIC_DATA__ = {"contacts":[{"id":229764767059,"properties":{"or
 /* ════════════════════════════════════════════════════════════
    CONSTANTES
 ════════════════════════════════════════════════════════════ */
-const SEARCH_TOOL = 'mcp__003aeda9-631a-4e7d-9dc3-b4bdcdba4c87__search_crm_objects';
-const OWNERS_TOOL  = 'mcp__003aeda9-631a-4e7d-9dc3-b4bdcdba4c87__search_owners';
-const QUERY_TOOL   = 'mcp__003aeda9-631a-4e7d-9dc3-b4bdcdba4c87__query_crm_data';
-const CAMPANHA = 'Cidade Na Mão 2026';
-
 const REGIAO_LABELS = {
   "Norte": "Norte", "norte": "Norte",
   "Nordeste": "Nordeste", "nordeste": "Nordeste",
@@ -396,313 +410,18 @@ function cleanLabel(raw) {
   return s;
 }
 
-function parseTsv(text) {
-  // A resposta real do query_crm_data vem com um preâmbulo em prosa antes do
-  // bloco TSV ("Dataset fetched...\n\nDataset TSV:\n<header>\t...") e um rodapé
-  // ("Showing X of Y total results."). Sem isolar o bloco real, a 1ª linha de
-  // prosa era tratada como cabeçalho e toda a tabela saía deslocada/vazia.
-  const allLines = text.split('\n');
-  let startIdx = 0;
-  const markerIdx = allLines.findIndex(l => l.trim().toLowerCase() === 'dataset tsv:');
-  if (markerIdx >= 0) {
-    startIdx = markerIdx + 1;
-  } else {
-    const tabIdx = allLines.findIndex(l => l.includes('\t'));
-    if (tabIdx >= 0) startIdx = tabIdx;
-  }
-  const lines = allLines.slice(startIdx)
-    .filter(l => l.trim().length)
-    .filter(l => !/^showing\s+\d+\s+of\s+\d+\s+total\s+results\.?$/i.test(l.trim()));
-  if (!lines.length) return { cols: [], rows: [] };
-  const headerCells = lines[0].split('\t');
-  const cols = headerCells.map(h => {
-    const m = h.match(/\[([^\]]+)\]/);
-    return { label: h.replace(/\s*\[[^\]]+\]\s*$/, '').trim(), key: m ? m[1] : h.trim() };
-  });
-  const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split('\t');
-    const row = {};
-    cols.forEach((c, idx) => { row[c.key] = cells[idx] !== undefined ? cells[idx].trim() : ''; });
-    rows.push(row);
-  }
-  return { cols, rows };
-}
-
-async function callTool(name, args) {
-  const res = await window.cowork.callMcpTool(name, args);
-  if (res && res.isError) {
-    const msg = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : 'Erro desconhecido na chamada MCP';
-    throw new Error(msg);
-  }
-  return res;
-}
-
-function getText(res) {
-  if (!res) return '';
-  if (res.content && res.content[0] && res.content[0].text) return res.content[0].text;
-  if (res.structuredContent) { try { return JSON.stringify(res.structuredContent); } catch(e) {} }
-  return '';
-}
-
-function getJson(res) {
-  if (res && res.structuredContent) return res.structuredContent;
-  const text = getText(res);
-  try { return JSON.parse(text); } catch(e) { return null; }
-}
-
-/* ════════════════════════════════════════════════════════════
-   FETCH: CONTATOS (paginado)
-════════════════════════════════════════════════════════════ */
-async function fetchAllContacts(onProgress) {
-  const props = ["hs_full_name_or_email","hubspot_owner_id","conectado","conectado_",
-    "tentativas_de_conexao","data_da_qualificacao_","data_de_conectado","forma_de_conexao",
-    "createdate","origem_do_contato","regiao","unqualified_reason","campanha"];
-  let all = [];
-  let offset = 0;
-  let page = 0;
-  while (true) {
-    page++;
-    const args = {
-      objectType: "CONTACT",
-      filterGroups: [{ filters: [{ propertyName: "campanha", operator: "EQ", value: CAMPANHA }] }],
-      properties: props,
-      limit: 100
-    };
-    if (offset) args.offset = offset;
-    const res = await callTool(SEARCH_TOOL, args);
-    const data = getJson(res);
-    const results = (data && data.results) || [];
-    all = all.concat(results);
-    if (onProgress) onProgress(all.length);
-    const total = (data && typeof data.total === 'number') ? data.total : null;
-    const nextOffset = (data && typeof data.offset === 'number') ? data.offset : (offset + results.length);
-    if (results.length < 100) break;
-    if (total !== null && all.length >= total) break;
-    offset = nextOffset;
-    if (page > 60) break;
-  }
-  return all;
-}
-
-/* ════════════════════════════════════════════════════════════
-   FETCH: OWNERS
-════════════════════════════════════════════════════════════ */
-async function fetchAllOwners() {
-  let map = {};
-  let offset = undefined;
-  let page = 0;
-  while (true) {
-    page++;
-    const args = { limit: 100 };
-    if (offset) args.offset = offset;
-    const res = await callTool(OWNERS_TOOL, args);
-    const data = getJson(res);
-    const results = (data && data.owners) || (data && data.results) || [];
-    results.forEach(o => {
-      const id = o.ownerId || o.id;
-      const name = o.name || [o.firstName, o.lastName].filter(Boolean).join(' ').trim() || o.email || ('Owner ' + id);
-      map[id] = name;
-    });
-    const hasMore = data && (data.hasMore === true);
-    const nextOffset = data && data.offset;
-    if (hasMore && nextOffset && nextOffset !== offset) { offset = nextOffset; } else { break; }
-    if (page > 20) break;
-  }
-  return map;
-}
-
-/* ════════════════════════════════════════════════════════════
-   FETCH: DEALS (raw) associados à campanha CNM26
-════════════════════════════════════════════════════════════ */
-async function fetchAllDealsRaw() {
-  const props = ["dealname","dealstage","amount","closedate","hubspot_owner_id","createdate","pipeline","origem_do_negocio","lost_reason__list_"];
-  let all = [];
-  let offset = 0;
-  let page = 0;
-  while (true) {
-    page++;
-    const args = {
-      objectType: "DEAL",
-      filterGroups: [{ filters: [{ propertyName: "campanha", operator: "EQ", value: CAMPANHA }] }],
-      properties: props,
-      limit: 100
-    };
-    if (offset) args.offset = offset;
-    let res;
-    try { res = await callTool(SEARCH_TOOL, args); } catch(e) { break; }
-    const data = getJson(res);
-    const results = (data && data.results) || [];
-    all = all.concat(results);
-    const total = (data && typeof data.total === 'number') ? data.total : null;
-    const nextOffset = (data && typeof data.offset === 'number') ? data.offset : (offset + results.length);
-    if (results.length < 100) break;
-    if (total !== null && all.length >= total) break;
-    offset = nextOffset;
-    if (page > 30) break;
-  }
-  return all;
-}
-
-/* ════════════════════════════════════════════════════════════
-   FETCH: ATIVIDADES POR NEGÓCIO (ligações + reuniões)
-   OBS: WhatsApp/Communications NÃO é contabilizado aqui — o tipo de objeto
-   "COMMUNICATION" está bloqueado pela allowlist do conector HubSpot
-   ("Object type 'COMMUNICATION' is blocked"), confirmado via testes diretos
-   com search_crm_objects e query_crm_data. Decisão da Pamela: seguir só com
-   ligações + reuniões enquanto essa limitação existir.
-════════════════════════════════════════════════════════════ */
-async function fetchDealActivities(deals) {
-  const result = {};
-  for (const d of deals) {
-    const dealId = d.id;
-    let calls = [], meetings = [];
-    try {
-      const res = await callTool(SEARCH_TOOL, {
-        objectType: "calls",
-        filterGroups: [{ associatedWith: [{ objectType: "deals", operator: "EQUAL", objectIdValues: [Number(dealId)] }] }],
-        properties: ["hs_timestamp", "hs_call_title", "hubspot_owner_id"],
-        limit: 100
-      });
-      const data = getJson(res);
-      calls = (data && data.results) || [];
-    } catch (e) { console.warn('Falha ao buscar ligações do negócio ' + dealId + ':', e.message); }
-    try {
-      const res = await callTool(SEARCH_TOOL, {
-        objectType: "meetings",
-        filterGroups: [{ associatedWith: [{ objectType: "deals", operator: "EQUAL", objectIdValues: [Number(dealId)] }] }],
-        properties: ["hs_meeting_start_time", "hs_meeting_outcome", "hubspot_owner_id"],
-        limit: 100
-      });
-      const data = getJson(res);
-      meetings = (data && data.results) || [];
-    } catch (e) { console.warn('Falha ao buscar reuniões do negócio ' + dealId + ':', e.message); }
-    result[dealId] = { calls, meetings };
-  }
-  return result;
-}
-
-/* ════════════════════════════════════════════════════════════
-   FETCH: agregados via query_crm_data
-════════════════════════════════════════════════════════════ */
-function getQueryCrmText(res) {
-  // A ferramenta query_crm_data NÃO devolve o texto pronto direto em content[0].text/
-  // structuredContent — o payload real é um envelope { results: [ { content: "<texto
-  // com o bloco TSV embutido>" } ] }. As funções genéricas getText()/getJson() pegavam
-  // só o envelope (ou o stringify dele), nunca chegavam no texto de fato com as quebras
-  // de linha reais — por isso parseTsv() nunca encontrava o marcador "Dataset TSV:" e
-  // a busca de reuniões ficava sempre vazia, mesmo com todas as outras correções.
-  let obj = null;
-  if (res && res.structuredContent) {
-    obj = res.structuredContent;
-  } else {
-    const raw = getText(res);
-    if (raw) { try { obj = JSON.parse(raw); } catch (e) { /* não era JSON */ } }
-  }
-  if (obj && Array.isArray(obj.results) && obj.results[0] && typeof obj.results[0].content === 'string') {
-    return obj.results[0].content;
-  }
-  // fallback: talvez já venha como texto puro
-  return getText(res);
-}
-window.__cnm26_debug = { lastQuerySql: null, lastQueryRawSample: null, lastQueryParsedRows: null, lastQueryError: null };
-async function queryGroupBy(sql) {
-  // O parâmetro de entrada da ferramenta query_crm_data é "sql" (não "query") —
-  // estava sendo enviado com nome errado, então TODAS as consultas SQL cruzadas
-  // (reuniões, origem, região, motivo de desqualificação) falhavam silenciosamente
-  // a cada carregamento do dashboard.
-  window.__cnm26_debug.lastQuerySql = sql;
-  try {
-    const res = await callTool(QUERY_TOOL, { sql: sql });
-    const text = getQueryCrmText(res);
-    window.__cnm26_debug.lastQueryRawSample = String(text || '').slice(0, 400);
-    const parsed = parseTsv(text);
-    window.__cnm26_debug.lastQueryParsedRows = parsed.rows.length;
-    window.__cnm26_debug.lastQueryError = null;
-    return parsed;
-  } catch (e) {
-    window.__cnm26_debug.lastQueryError = e.message;
-    window.__cnm26_debug.lastQueryRawSample = null;
-    window.__cnm26_debug.lastQueryParsedRows = null;
-    throw e;
-  }
-}
-
-window.__cnm26 = { contacts: [], owners: {}, deals: [], meetings: [], dealActivities: {}, segByOrigem: null, segByRegiao: null, unqualByReason: null };
-
-/* ════════════════════════════════════════════════════════════
-   FETCH: REUNIÕES (join CONTACT → MEETING)
-════════════════════════════════════════════════════════════ */
 const MEETING_OUTCOME_MAP = { "SCHEDULED":"Agendada","RESCHEDULED":"Agendada","COMPLETED":"Realizada","NO_SHOW":"Não Realizada","CANCELED":"Pendente" };
 function extractOutcomeCode(raw) {
   if (!raw) return '';
   const m = String(raw).match(/\(([^)]+)\)/);
   return m ? m[1].trim() : String(raw).trim();
 }
-// Variante usada para reuniões vindas de search_crm_objects, onde hs_meeting_outcome
-// já chega como código puro (ex.: "COMPLETED"), sem o formato "Label (CODE)" do SQL cruzado.
+// Variante usada para reuniões vindas do /api/data, onde hs_meeting_outcome já
+// chega como código puro (ex.: "COMPLETED"), sem o formato "Label (CODE)".
 function meetingOutcomeLabelRaw(raw) {
   if (!raw) return 'Sem desfecho';
   const code = String(raw).toUpperCase().trim();
   return MEETING_OUTCOME_MAP[code] || code;
-}
-async function fetchReunioesLiveRaw() {
-  // OBS: CONTACT.hs_full_name_or_email é uma propriedade oculta/calculada e é BLOQUEADA
-  // pelo motor de SQL cruzado do HubSpot ("Property is hidden and cannot be queried"),
-  // mesmo funcionando normalmente no search_crm_objects. Incluí-la aqui fazia esta query
-  // falhar SEMPRE, zerando Reuniões Agendadas/Concluídas no dashboard. Removida — o nome
-  // do contato não é exibido a partir desta consulta (já vem de fetchAllContacts).
-  // OBS 2: usar MEETING.hubspot_owner_id (proprietário da própria reunião), não
-  // CONTACT.hubspot_owner_id. Quando quem agenda/realiza a reunião é diferente do
-  // proprietário do contato (ex.: Hanny realiza a reunião mas o contato pertence a
-  // outro pré-vendedor), usar o owner do contato fazia a reunião "desaparecer" das
-  // estatísticas de quem efetivamente a realizou. Regra: reunião usa o owner da própria reunião.
-  const sql = "SELECT CONTACT.hs_object_id, MEETING.hubspot_owner_id, MEETING.hs_meeting_outcome, MEETING.hs_meeting_start_time FROM CONTACT WHERE campanha = '" + CAMPANHA + "' AND associations.MEETING IS NOT NULL";
-  try {
-    const parsed = await queryGroupBy(sql);
-    return parsed.rows || [];
-  } catch (e) {
-    console.warn('Falha ao buscar reuniões via SQL cruzado:', e.message);
-    return null; // null = indisponível, diferente de [] = zero reuniões
-  }
-}
-
-/* ════════════════════════════════════════════════════════════
-   BUILD LIVE DATA — orquestra todas as buscas
-════════════════════════════════════════════════════════════ */
-async function buildLiveData(onProgress) {
-  const prog = (msg) => { if (onProgress) onProgress(msg); };
-
-  prog('Buscando contatos da campanha…');
-  const TEST_CONTACT_NAMES = ['karol castilho']; // contatos de teste, excluídos de todos os relatórios
-  const contactsRaw = await fetchAllContacts((n) => prog('Buscando contatos da campanha… (' + n + ')'));
-  const contacts = contactsRaw.filter(c => {
-    const nm = ((c.properties && c.properties.hs_full_name_or_email) || '').trim().toLowerCase();
-    return !TEST_CONTACT_NAMES.includes(nm);
-  });
-
-  prog('Buscando responsáveis (owners)…');
-  const owners = await fetchAllOwners();
-
-  prog('Buscando negócios da campanha…');
-  const deals = await fetchAllDealsRaw();
-
-  prog('Buscando reuniões…');
-  const meetings = await fetchReunioesLiveRaw();
-
-  prog('Buscando atividades dos negócios (ligações e reuniões)…');
-  const dealActivities = await fetchDealActivities(deals);
-
-  prog('Buscando segmentações (origem, região, desqualificação)…');
-  let segByOrigem = null, segByRegiao = null, unqualByReason = null, origemConectado = null, regiaoConectado = null;
-  try { segByOrigem = await queryGroupBy("SELECT origem_do_contato, COUNT(*) FROM CONTACT WHERE campanha = '" + CAMPANHA + "' GROUP BY origem_do_contato"); } catch(e) { console.warn(e.message); }
-  try { segByRegiao = await queryGroupBy("SELECT regiao, COUNT(*) FROM CONTACT WHERE campanha = '" + CAMPANHA + "' GROUP BY regiao"); } catch(e) { console.warn(e.message); }
-  try { unqualByReason = await queryGroupBy("SELECT unqualified_reason, COUNT(*) FROM CONTACT WHERE campanha = '" + CAMPANHA + "' GROUP BY unqualified_reason"); } catch(e) { console.warn(e.message); }
-  try { origemConectado = await queryGroupBy("SELECT origem_do_contato, conectado_, COUNT(*) FROM CONTACT WHERE campanha = '" + CAMPANHA + "' GROUP BY origem_do_contato, conectado_"); } catch(e) { console.warn(e.message); }
-  try { regiaoConectado = await queryGroupBy("SELECT regiao, conectado_, COUNT(*) FROM CONTACT WHERE campanha = '" + CAMPANHA + "' GROUP BY regiao, conectado_"); } catch(e) { console.warn(e.message); }
-
-  window.__cnm26 = { contacts, owners, deals, meetings, dealActivities, segByOrigem, segByRegiao, unqualByReason, origemConectado, regiaoConectado };
-  return window.__cnm26;
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -1012,6 +731,40 @@ let _resizeTrackingCard = null;
   });
 })();
 
+/* ════════════════════════════════════════════════════════════
+   TOOLTIP GENÉRICO (hover) — qualquer elemento com o atributo
+   data-tip-html="<html codificado com encodeURIComponent>" exibe
+   um balão de detalhe ao passar o mouse (usado nas barras de
+   Metas para mostrar o detalhamento por quinzena).
+════════════════════════════════════════════════════════════ */
+(function initTooltipListeners() {
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest('[data-tip-html]');
+    if (!el) return;
+    const tip = document.getElementById('cnm-tip');
+    if (!tip) return;
+    tip.innerHTML = decodeURIComponent(el.getAttribute('data-tip-html'));
+    tip.style.display = 'block';
+  });
+  document.addEventListener('mousemove', (e) => {
+    const tip = document.getElementById('cnm-tip');
+    if (!tip || tip.style.display !== 'block') return;
+    const pad = 14;
+    let left = e.clientX + pad, top = e.clientY + pad;
+    if (left + 270 > window.innerWidth) left = e.clientX - 270 - pad;
+    if (top + 120 > window.innerHeight) top = e.clientY - 120 - pad;
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+  });
+  document.addEventListener('mouseout', (e) => {
+    const el = e.target.closest('[data-tip-html]');
+    if (!el) return;
+    if (el.contains(e.relatedTarget)) return;
+    const tip = document.getElementById('cnm-tip');
+    if (tip) tip.style.display = 'none';
+  });
+})();
+
 // Mapa etapa (ID interno do HubSpot) → label em português. A propriedade dealstage
 // guarda o ID numérico da etapa, não o nome — exibir o ID bruto mostrava "código"
 // em vez do nome da etapa. Mapa obtido via get_properties(deals, dealstage).options.
@@ -1186,6 +939,40 @@ function onMsChange(msId, applyFn) {
   applyFn();
 }
 
+/* ════════════════════════════════════════════════════════════
+   PERSISTÊNCIA DE FILTROS (localStorage)
+   Guarda a seleção de cada filtro (multi-select e datas) para que
+   ela sobreviva a um F5 e também aos redesenhos automáticos do
+   dashboard (auto-refresh a cada 2min re-renderiza tudo do zero).
+   As próprias funções "apply..." de cada aba persistem seu estado
+   atual sempre que são chamadas; "restore..." é chamado logo após
+   o innerHTML de cada aba ser montado, antes de aplicar o filtro.
+════════════════════════════════════════════════════════════ */
+const FILTER_PREFIX = 'cnm26_filters_v1_';
+function filterGet(key) {
+  try { const raw = localStorage.getItem(FILTER_PREFIX + key); return raw === null ? null : JSON.parse(raw); } catch(e) { return null; }
+}
+function filterSet(key, val) {
+  try { localStorage.setItem(FILTER_PREFIX + key, JSON.stringify(val)); } catch(e) {}
+}
+// Reaplica, nos checkboxes recém-criados de um ms-dropdown, a última seleção salva.
+function restoreMsSelection(msId) {
+  const saved = filterGet(msId);
+  if (!saved || !Array.isArray(saved)) return;
+  const dd = document.getElementById(msId);
+  if (!dd) return;
+  const boxes = dd.querySelectorAll('.ms-opt input[type=checkbox][value]');
+  boxes.forEach(b => { b.checked = saved.includes(b.value); });
+  const master = dd.querySelector('.ms-opt input[type=checkbox]:not([value])');
+  if (master) master.checked = boxes.length > 0 && saved.length === boxes.length;
+}
+// Reaplica o valor salvo de um input de data (ex.: filtro "de/até" do funil).
+function restoreDateFilter(id) {
+  const saved = filterGet(id);
+  const el = document.getElementById(id);
+  if (el && saved != null) el.value = saved;
+}
+
 function meetingsStats(meetings) {
   if (meetings === null) return { available: false, agendadas: 0, concluidas: 0, rows: [] };
   let agendadas = 0, concluidas = 0;
@@ -1308,6 +1095,9 @@ function applyD1ContactFunnel() {
   const start = (document.getElementById('d1c-date-start') || {}).value || '';
   const end = (document.getElementById('d1c-date-end') || {}).value || '';
   const selOwners = getSelectedMs('ms-d1c-owner');
+  filterSet('d1c-date-start', start);
+  filterSet('d1c-date-end', end);
+  filterSet('ms-d1c-owner', selOwners);
   let contacts = D1_DATA.contacts;
   contacts = contacts.filter(c => {
     const p = c.properties || {};
@@ -1329,6 +1119,9 @@ function applyD1DealFunnel() {
   const start = (document.getElementById('d1d-date-start') || {}).value || '';
   const end = (document.getElementById('d1d-date-end') || {}).value || '';
   const selOwners = getSelectedMs('ms-d1d-owner');
+  filterSet('d1d-date-start', start);
+  filterSet('d1d-date-end', end);
+  filterSet('ms-d1d-owner', selOwners);
   let deals = D1_DATA.deals || [];
   deals = deals.filter(d => {
     const owner = ownerName(dealOwnerId(d, D1_DATA), D1_DATA.owners);
@@ -1407,10 +1200,14 @@ const contactOwnerSet = [...new Set(contacts.map(c => ownerName((c.properties||{
   const contactFunnel0 = buildContactFunnelHtml(contacts, data.meetings);
   const dealFunnel0 = buildDealFunnelHtml(deals);
 
-const dbg = window.__cnm26_debug || {};
-  const meetingsNote = mstats.available
-    ? `<div class="note" style="font-size:11px;color:var(--text-3,#94a3b8)">Diagnóstico reuniões: ${dbg.lastQueryParsedRows == null ? '—' : dbg.lastQueryParsedRows} linha(s) lida(s) do HubSpot.</div>`
-    : `<div class="alert a-amber">Não foi possível carregar dados de reuniões nesta consulta ao HubSpot. Os números de Reuniões Agendadas/Concluídas abaixo podem estar incompletos — recarregue a página para tentar novamente.<br><span style="font-size:11px;opacity:.85">Detalhe técnico: ${esc(dbg.lastQueryError || 'erro desconhecido')}</span></div>`;
+// Diagnóstico de sincronização com o HubSpot — vem direto da resposta do
+// /api/data (campo "sync"), refletindo a busca que realmente rodou nesta
+// consulta (contagens e eventuais falhas parciais), não um valor congelado.
+const sync = data.sync || null;
+const syncTime = sync && sync.fetchedAt ? new Date(sync.fetchedAt).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' }) : null;
+const meetingsNote = mstats.available
+  ? `<div class="note" style="font-size:11px;color:var(--text-3,#94a3b8)">Diagnóstico HubSpot: ${sync ? sync.contactsCount + ' contatos · ' + sync.dealsCount + ' negócios · ' + (sync.meetingsCount == null ? '—' : sync.meetingsCount) + ' reuniões lidas' + (syncTime ? ' · sincronizado ' + syncTime + (sync.forced ? ' (busca forçada por "Atualizar agora")' : ' (auto-refresh)') : '') : 'exibindo dados do snapshot salvo — sem detalhe de sincronização até a próxima busca ao vivo.'}</div>`
+  : `<div class="alert a-amber">Não foi possível carregar dados de reuniões nesta consulta ao HubSpot. Os números de Reuniões Agendadas/Concluídas abaixo podem estar incompletos — clique em "Atualizar agora" para tentar de novo.<br><span style="font-size:11px;opacity:.85">Detalhe técnico: ${esc((sync && sync.meetingsError) || 'erro desconhecido')}</span></div>`;
 
   root.innerHTML = `
   <div class="kpi-strip ks-5">
@@ -1525,6 +1322,16 @@ const dbg = window.__cnm26_debug || {};
   restoreCardLayout(document.getElementById('d1-grid-a'), 'd1-grid-a');
   restoreCardLayout(document.getElementById('d1-grid-b'), 'd1-grid-b');
   restoreCardLayout(root, 'd1-root');
+
+  // Reaplica filtros salvos (data + proprietário) para que sobrevivam a reload/auto-refresh.
+  restoreMsSelection('ms-d1c-owner');
+  restoreDateFilter('d1c-date-start');
+  restoreDateFilter('d1c-date-end');
+  applyD1ContactFunnel();
+  restoreMsSelection('ms-d1d-owner');
+  restoreDateFilter('d1d-date-start');
+  restoreDateFilter('d1d-date-end');
+  applyD1DealFunnel();
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -1572,8 +1379,8 @@ function renderD2(data) {
   const mstatsAll = meetingsStats(data.meetings);
   const contactNameById = {};
   data.contacts.forEach(c => { contactNameById[c.id] = (c.properties && c.properties.hs_full_name_or_email) || 'Sem nome'; });
-  // Lista completa de reuniões (TODAS, qualquer desfecho) — mesma fonte que alimenta os
-  // KPIs/funil acima (fetchReunioesLiveRaw), apenas exibida linha a linha em vez de agregada.
+  // Lista completa de reuniões (TODAS, qualquer desfecho) — mesma fonte (data.meetings,
+  // vindo do /api/data) que alimenta os KPIs/funil acima, só exibida linha a linha.
   const allMeetings = mstatsAll.rows.slice().sort((a,b) => new Date(b.startTime || 0) - new Date(a.startTime || 0));
   const ownerRows = buildOwnerStats(data).filter(r => r.leads > 0);
   const preRows = ownerRows.filter(r => PRE_VENDEDORES.includes(r.name));
@@ -1684,10 +1491,14 @@ function renderD2(data) {
   </div>
   `;
   restoreCardLayout(document.getElementById('d2-grid'), 'd2-grid');
+
+  restoreMsSelection('ms-d2-owner');
+  applyD2Filter();
 }
 
 function applyD2Filter() {
   const selected = getSelectedMs('ms-d2-owner');
+  filterSet('ms-d2-owner', selected);
   updateMsLabel('ms-d2-owner', 'Todos');
   const rows = document.querySelectorAll('#tbl-d2 tbody tr');
   rows.forEach(tr => {
@@ -1900,6 +1711,10 @@ function renderD4(data) {
   </div>
   `;
   restoreCardLayout(root, 'd4-root');
+
+  restoreMsSelection('ms-d4-owner');
+  restoreMsSelection('ms-d4-stage');
+  applyD4Filter();
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -2023,10 +1838,14 @@ function renderD5(data) {
   `;
   restoreCardLayout(document.getElementById('d5-grid'), 'd5-grid');
   restoreCardLayout(root, 'd5-root');
+
+  restoreMsSelection('ms-d5-origem');
+  applyD5ContactsFilter();
 }
 
 function applyD5ContactsFilter() {
   const sel = getSelectedMs('ms-d5-origem');
+  filterSet('ms-d5-origem', sel);
   updateMsLabel('ms-d5-origem', 'Todas as origens');
   document.querySelectorAll('#d5-root tbody tr[data-origem]').forEach(row => {
     const o = row.getAttribute('data-origem');
@@ -2037,6 +1856,8 @@ function applyD5ContactsFilter() {
 function applyD4Filter() {
   const selOwner = getSelectedMs('ms-d4-owner');
   const selStage = getSelectedMs('ms-d4-stage');
+  filterSet('ms-d4-owner', selOwner);
+  filterSet('ms-d4-stage', selStage);
   updateMsLabel('ms-d4-owner', 'Todos os responsáveis');
   updateMsLabel('ms-d4-stage', 'Todas as etapas');
   document.querySelectorAll('#d4-root tbody tr[data-owner]').forEach(row => {
@@ -2172,13 +1993,86 @@ function renderD6(data) {
     <div class="card-body" id="d6-ranking"></div>
   </div>
   </div>
+
+  <div class="card" data-card-id="d6-quinzena-comparativo">
+    <div class="card-head">
+      <div class="card-title">Comparativo entre Quinzenas</div>
+      <div class="card-badge" id="d6-cmp-badge">—</div>
+    </div>
+    <div class="card-body tbl-wrap" id="d6-cmp-body"></div>
+    <div class="note">Uma coluna por quinzena já iniciada (a partir de junho/2026), lado a lado, por pré-vendedor. A coluna "Variação" compara a quinzena mais recente com a imediatamente anterior. Passe o mouse sobre as barras de Qualificados/Reuniões acima para ver o detalhe por quinzena.</div>
+  </div>
   `;
   restoreCardLayout(document.getElementById('d6-grid'), 'd6-grid');
   restoreCardLayout(root, 'd6-root');
 
-  updateMsLabel('ms-d6-owner', 'Todos');
-  updateMsLabel('ms-d6-quinzena', 'Quinzena atual');
+  restoreMsSelection('ms-d6-owner');
+  restoreMsSelection('ms-d6-quinzena');
   applyD6Filter();
+}
+
+// Monta o HTML do tooltip de detalhe (por quinzena) exibido ao passar o mouse
+// sobre uma barra de Qualificados/Reuniões da tabela "Metas por Pré-Vendedor".
+function buildQuinzenaTipHtml(name, metas, qIds, metric, metricLabel) {
+  const now = new Date();
+  // No tooltip só faz sentido listar quinzenas já iniciadas (as futuras são sempre 0);
+  // o total, porém, continua somando todo o período selecionado (qIds).
+  const displayIds = qIds.filter(qid => {
+    const q = metas.quinzenas.find(x => x.id === qid);
+    return q && q.start <= now;
+  });
+  const idsToShow = displayIds.length ? displayIds : qIds;
+  const rowsHtml = idsToShow.map(qid => {
+    const q = metas.quinzenas.find(x => x.id === qid);
+    const c = (metas.byOwnerQuinzena[name] && metas.byOwnerQuinzena[name][qid]) || { qualificados: 0, agendadas: 0 };
+    return `<tr><td>${esc(q ? q.label : qid)}</td><td class="r">${c[metric]}</td></tr>`;
+  }).join('');
+  const total = qIds.reduce((s, qid) => {
+    const c = (metas.byOwnerQuinzena[name] && metas.byOwnerQuinzena[name][qid]) || { qualificados: 0, agendadas: 0 };
+    return s + c[metric];
+  }, 0);
+  const omitted = qIds.length - idsToShow.length;
+  const omittedNote = omitted > 0 ? `<tr><td colspan="2" style="opacity:.7;font-style:italic">+ ${omitted} quinzena${omitted === 1 ? '' : 's'} futura${omitted === 1 ? '' : 's'} sem dados</td></tr>` : '';
+  return `<strong>${esc(name)} — ${esc(metricLabel)} por quinzena</strong><table><tbody>${rowsHtml}${omittedNote}<tr class="tip-total"><td>Total</td><td class="r">${total}</td></tr></tbody></table>`;
+}
+
+// Tabela "Comparativo entre Quinzenas": uma coluna por quinzena já iniciada,
+// mostrando Qualificados/Reuniões de cada pré-vendedor lado a lado, com a
+// variação (▲/▼) entre a quinzena mais recente e a anterior.
+function buildD6ComparativoHtml(metas, owners) {
+  const now = new Date();
+  const elapsed = metas.quinzenas.filter(q => q.start <= now);
+  if (!elapsed.length) return { html: '<div class="empty-box">Nenhuma quinzena iniciada ainda.</div>', badge: 'sem dados' };
+
+  const rows = owners.map(name => {
+    const cells = elapsed.map(q => {
+      const c = (metas.byOwnerQuinzena[name] && metas.byOwnerQuinzena[name][q.id]) || { qualificados: 0, agendadas: 0 };
+      return { qid: q.id, label: q.label, qualificados: c.qualificados, agendadas: c.agendadas };
+    });
+    const last = cells[cells.length - 1];
+    const prev = cells.length > 1 ? cells[cells.length - 2] : null;
+    return { name, cells, last, prev };
+  });
+
+  const thead = `<tr><th>Pré-Vendedor</th>${elapsed.map(q => `<th class="c">${esc(q.label)}</th>`).join('')}<th class="c">Variação (últ. quinzena)</th></tr>`;
+  const tbody = rows.length ? rows.map(r => `
+    <tr>
+      <td class="tname">${esc(r.name)}</td>
+      ${r.cells.map(c => `<td class="qz-cell">${numLink({owners:[r.name], quinzenaIds:[c.qid], status:'qualificados', title:r.name+' — '+c.label}, c.qualificados)} qualif.<br><span style="color:var(--text-3);font-size:10px">${numLink({owners:[r.name], quinzenaIds:[c.qid], status:'agendadas', ownerByMeeting:true, title:r.name+' — '+c.label}, c.agendadas)} reun.</span></td>`).join('')}
+      <td class="qz-cell">${r.prev ? (() => {
+        const dQ = r.last.qualificados - r.prev.qualificados;
+        const dR = r.last.agendadas - r.prev.agendadas;
+        const arrow = d => d > 0 ? '▲' : d < 0 ? '▼' : '—';
+        const dir = d => d > 0 ? 'up' : d < 0 ? 'down' : 'flat';
+        return `<div class="qz-trend ${dir(dQ)}">Qualif. ${arrow(dQ)} ${dQ === 0 ? '' : (dQ > 0 ? '+' : '') + dQ}</div>`
+             + `<div class="qz-trend ${dir(dR)}">Reun. ${arrow(dR)} ${dR === 0 ? '' : (dR > 0 ? '+' : '') + dR}</div>`;
+      })() : '<span class="qz-trend flat">— sem quinzena anterior</span>'}</td>
+    </tr>`).join('') : `<tr><td colspan="${elapsed.length + 2}"><div class="empty-box">Nenhum pré-vendedor selecionado.</div></td></tr>`;
+
+  return {
+    html: `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
+    badge: elapsed.length + (elapsed.length === 1 ? ' quinzena' : ' quinzenas')
+  };
 }
 
 function applyD6Filter() {
@@ -2186,6 +2080,8 @@ function applyD6Filter() {
   if (!metas) return;
   const selOwners = getSelectedMs('ms-d6-owner');
   const selQuinzenas = getSelectedMs('ms-d6-quinzena');
+  filterSet('ms-d6-owner', selOwners);
+  filterSet('ms-d6-quinzena', selQuinzenas);
   updateMsLabel('ms-d6-owner', 'Todos');
   updateMsLabel('ms-d6-quinzena', 'Quinzena atual');
 
@@ -2216,15 +2112,21 @@ function applyD6Filter() {
     <tr>
       <td class="tname">${esc(r.name)}</td>
       <td style="min-width:170px">
-        <div class="meta-bg" style="position:relative"><div class="meta-fill" style="width:${r.pctQ.toFixed(0)}%;background:${metaBarColor(r.pctQ)}"></div>${metaBarStarHtml(r.pctQ)}</div>
+        <div class="meta-bg" style="position:relative" data-tip-html="${encodeURIComponent(buildQuinzenaTipHtml(r.name, metas, qIds, 'qualificados', 'Qualificados'))}"><div class="meta-fill" style="width:${r.pctQ.toFixed(0)}%;background:${metaBarColor(r.pctQ)}"></div>${metaBarStarHtml(r.pctQ)}</div>
         <div class="meta-labels"><span>${numLink({owners:[r.name], quinzenaIds:qIds, status:'qualificados', title:r.name}, r.qualificados)} / ${r.metaQ}</span><span>${r.faltaQ===0?'meta atingida':'faltam '+r.faltaQ}</span></div>
       </td>
       <td style="min-width:170px">
-        <div class="meta-bg" style="position:relative"><div class="meta-fill" style="width:${r.pctR.toFixed(0)}%;background:${metaBarColor(r.pctR)}"></div>${metaBarStarHtml(r.pctR)}</div>
+        <div class="meta-bg" style="position:relative" data-tip-html="${encodeURIComponent(buildQuinzenaTipHtml(r.name, metas, qIds, 'agendadas', 'Reuniões Agendadas'))}"><div class="meta-fill" style="width:${r.pctR.toFixed(0)}%;background:${metaBarColor(r.pctR)}"></div>${metaBarStarHtml(r.pctR)}</div>
         <div class="meta-labels"><span>${numLink({owners:[r.name], quinzenaIds:qIds, status:'agendadas', ownerByMeeting:true, title:r.name}, r.agendadas)} / ${r.metaR}</span><span>${r.faltaR===0?'meta atingida':'faltam '+r.faltaR}</span></div>
       </td>
     </tr>`).join('') : '<tr><td colspan="3"><div class="empty-box">Nenhum pré-vendedor selecionado.</div></td></tr>';
   }
+
+  const cmp = buildD6ComparativoHtml(metas, owners);
+  const cmpBody = document.getElementById('d6-cmp-body');
+  const cmpBadge = document.getElementById('d6-cmp-badge');
+  if (cmpBody) cmpBody.innerHTML = cmp.html;
+  if (cmpBadge) cmpBadge.textContent = cmp.badge;
 
   const ranking = rows.slice().sort((a,b) => b.score - a.score);
   const rankBox = document.getElementById('d6-ranking');
@@ -2325,24 +2227,33 @@ document.addEventListener('DOMContentLoaded', init);
    DADOS AO VIVO via /api/data (Vercel Serverless Function)
    A função busca os dados frescos no HubSpot com o token guardado
    em HUBSPOT_TOKEN e devolve o mesmo formato do snapshot. O cache
-   de borda da Vercel (~110s) protege o rate limit do HubSpot.
+   de borda da Vercel (~110s) protege o rate limit do HubSpot no
+   auto-refresh — mas isso significa que um fetch comum pode devolver
+   uma resposta antiga sem a função rodar de novo. Por isso, cliques
+   manuais em "Atualizar agora" usam force=true (?fresh=1), que faz o
+   /api/data pular esse cache e buscar de verdade no HubSpot.
 ════════════════════════════════════════════════════════════ */
-async function fetchApiData() {
+async function fetchApiData(force) {
   try {
-    const r = await fetch('/api/data', { cache: 'no-store' });
+    const url = force ? '/api/data?fresh=1&_=' + Date.now() : '/api/data';
+    const r = await fetch(url, { cache: 'no-store' });
     const json = await r.json();
     if (json && json.available && json.data) return json.data;
     if (json && json.status && json.status.ok === false) {
       console.warn('/api/data indisponível:', json.status.error);
+      window.__cnm26_lastSyncError = json.status.error;
     }
     return null;
   } catch (e) {
     console.warn('Falha ao buscar /api/data:', e.message);
+    window.__cnm26_lastSyncError = e.message;
     return null;
   }
 }
 
-/* Botão "Atualizar agora" — busca o /api/data e redesenha. */
+/* Botão "Atualizar agora" — força uma busca de verdade no HubSpot (ignora o
+   cache de borda da Vercel) e redesenha, mostrando a confirmação de que a
+   sincronização realmente aconteceu (rastreabilidade da conexão). */
 async function refreshLiveData() {
   const btn = document.getElementById('btn-refresh');
   if (btn.dataset.busy === '1') return;
@@ -2359,14 +2270,15 @@ async function refreshLiveData() {
     if (restore) setTimeout(() => { btn.textContent = originalLabel; }, 3000);
   }
 
-  const data = await fetchApiData();
+  const data = await fetchApiData(true);
   if (data) {
-    applyLiveData(data);
+    applyLiveData(data, true);
     finish('✓ Atualizado', true);
   } else {
     setUpdatingIndicator(false);
     finish(originalLabel, false);
-    alert('Não foi possível atualizar agora. Verifique se HUBSPOT_TOKEN está configurado nas variáveis de ambiente da Vercel e tente novamente.');
+    const detail = window.__cnm26_lastSyncError ? '\n\nDetalhe técnico: ' + window.__cnm26_lastSyncError : '';
+    alert('Não foi possível sincronizar agora com o HubSpot. Verifique se HUBSPOT_TOKEN está configurado nas variáveis de ambiente da Vercel e tente novamente.' + detail);
   }
 }
 
@@ -2382,7 +2294,7 @@ function setUpdatingIndicator(on) {
   }
 }
 
-function applyLiveData(data) {
+function applyLiveData(data, forced) {
   window.__dash = data;
   window.__CNM26_STATIC_DATA__ = data;
   renderD1(data);
@@ -2392,10 +2304,24 @@ function applyLiveData(data) {
   renderD5(data);
   renderD6(data);
   const updatedLabel = data.fetchedAt
-    ? new Date(data.fetchedAt).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
-    : new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    ? new Date(data.fetchedAt).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' })
+    : new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
   setUpdatingIndicator(false);
-  document.getElementById('hdr-updated').textContent = 'Atualizado ' + updatedLabel;
+  const chip = document.getElementById('hdr-updated');
+  // Rastreabilidade: só quando o clique manual força a busca (?fresh=1) temos
+  // certeza de que essa resposta veio de uma consulta nova ao HubSpot (não do
+  // cache de borda da Vercel) — por isso o rótulo é explícito nesse caso.
+  chip.textContent = forced ? 'Sincronizado com HubSpot ' + updatedLabel : 'Atualizado ' + updatedLabel;
+  const sync = data.sync;
+  if (sync) {
+    const parts = [
+      sync.contactsCount + ' contatos', sync.dealsCount + ' negócios',
+      sync.meetingsOk ? (sync.meetingsCount == null ? '' : sync.meetingsCount + ' reuniões') : 'reuniões indisponíveis (' + (sync.meetingsError || 'erro') + ')',
+      sync.dealActivitiesOk ? '' : 'atividades de negócio indisponíveis (' + (sync.dealActivitiesError || 'erro') + ')'
+    ].filter(Boolean);
+    chip.title = (sync.forced ? 'Busca forçada no HubSpot' : 'Busca em segundo plano') + ' às ' + updatedLabel + ' — ' + parts.join(' · ');
+  }
+  window.__cnm26_lastSyncError = null;
 }
 
 /* ════════════════════════════════════════════════════════════
