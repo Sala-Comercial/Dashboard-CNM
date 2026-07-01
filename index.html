@@ -1010,7 +1010,11 @@ function meetingsStats(meetings) {
   const rows = meetings.map(r => {
     const code = extractOutcomeCode(r.hs_meeting_outcome);
     const label = MEETING_OUTCOME_MAP[code] || (code ? code : 'Sem desfecho');
-    if (label === 'Agendada' || label === 'Realizada') agendadas++;
+    // "Reuniões Agendadas" conta TODA reunião registrada, independente do
+    // resultado (mesmo não comparecimento/cancelada) — o que importa aqui é
+    // que a reunião foi marcada, não o que aconteceu depois. "Concluídas"
+    // continua restrita só às realmente realizadas.
+    agendadas++;
     if (label === 'Realizada') concluidas++;
     return { contactId: r.hs_object_id, ownerId: r.hubspot_owner_id, outcome: label, startTime: r.hs_meeting_start_time, createdAt: r.hs_createdate };
   });
@@ -1393,7 +1397,9 @@ function buildOwnerStats(data) {
     if (isQualificado(c)) s.qualificados++;
     if (isDesqualificado(c)) s.desqualificados++;
     const outcomes = meetByContact[c.id] || [];
-    if (outcomes.some(o => o === 'Agendada' || o === 'Realizada')) s.agendadas++;
+    // Conta como "agendada" qualquer contato com reunião registrada, seja
+    // qual for o resultado (agendar é a atividade que conta aqui).
+    if (outcomes.length > 0) s.agendadas++;
     if (outcomes.some(o => o === 'Realizada')) s.concluidas++;
   });
 
@@ -1790,7 +1796,9 @@ function renderD5(data) {
     let agendadas = 0, concluidas = 0;
     list.forEach(c => {
       const outcomes = meetMap[c.id] || [];
-      if (outcomes.some(o => o === 'Agendada' || o === 'Realizada')) agendadas++;
+      // Conta como "agendada" qualquer contato com reunião registrada, seja
+      // qual for o resultado (agendar é a atividade que conta aqui).
+      if (outcomes.length > 0) agendadas++;
       if (outcomes.some(o => o === 'Realizada')) concluidas++;
     });
     const stages = [
@@ -1962,7 +1970,8 @@ function buildMetasData(data) {
     cell(owner, q.id).qualificados++;
   });
   mstats.rows.forEach(r => {
-    if (r.outcome !== 'Agendada' && r.outcome !== 'Realizada') return;
+    // Toda reunião registrada conta como "agendada" na quinzena, independente
+    // do resultado (não comparecimento/cancelada também contam — ver meetingsStats).
     const owner = ownerName(r.ownerId, data.owners);
     // Metas encaixa a reunião na quinzena em que ela foi CRIADA no HubSpot
     // (hs_createdate), não na quinzena da data agendada (startTime) — é a
