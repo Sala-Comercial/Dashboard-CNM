@@ -1421,10 +1421,8 @@ const meetingsNote = mstats.available
 /* ════════════════════════════════════════════════════════════
    RENDER — D2 PERFORMANCE DA EQUIPE
 ════════════════════════════════════════════════════════════ */
-const PRE_VENDEDORES = ["Tayane Cristina Lopes Ferreira","Igor Cañizo Melo Dantas","Macley da Costa Polezi","Miriam Maciel","Hanny Mendonça","Ariela Salgado"];
-// Ariela Salgado não entra na aba Metas (não é cobrada por meta de quinzena),
-// mas continua aparecendo normalmente em Performance da Equipe (D2).
-const PRE_VENDEDORES_METAS = PRE_VENDEDORES.filter(n => n !== "Ariela Salgado");
+// Ariela Salgado não faz mais parte da aba Performance Pré-Venda nem de Metas.
+const PRE_VENDEDORES = ["Tayane Cristina Lopes Ferreira","Igor Cañizo Melo Dantas","Macley da Costa Polezi","Miriam Maciel","Hanny Mendonça"];
 
 function buildOwnerStats(data) {
   const mstats = meetingsStats(data.meetings);
@@ -1471,7 +1469,7 @@ function renderD2(data) {
   // Lista completa de reuniões (TODAS, qualquer desfecho) — mesma fonte (data.meetings,
   // vindo do /api/data) que alimenta os KPIs/funil acima, só exibida linha a linha.
   const allMeetings = mstatsAll.rows.slice().sort((a,b) => new Date(b.startTime || 0) - new Date(a.startTime || 0));
-  const ownerRows = buildOwnerStats(data).filter(r => r.leads > 0);
+  const ownerRows = buildOwnerStats(data).filter(r => r.leads > 0 && r.name !== 'Ariela Salgado');
   const preRows = ownerRows.filter(r => PRE_VENDEDORES.includes(r.name));
   const activeCount = preRows.length;
   const totalConcluidas = ownerRows.reduce((s,r) => s + r.concluidas, 0);
@@ -1578,11 +1576,110 @@ function renderD2(data) {
     </div>
     <div class="note">Lista de todas as reuniões associadas a contatos da campanha, qualquer que seja o desfecho. Responsável exibido é o proprietário da própria reunião (não do contato).</div>
   </div>
+
+  <div class="card" data-card-id="d2-lig-whats-email" style="margin-top:16px">
+    <div class="card-head" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Ligações, WhatsApps e E-mails</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="date" id="d2c-date-start" class="filter-date" onchange="applyD2ActivityReport()" title="Data inicial (criação do lead)">
+        <span class="filter-sep">até</span>
+        <input type="date" id="d2c-date-end" class="filter-date" onchange="applyD2ActivityReport()" title="Data final (criação do lead)">
+        <div class="ms-dropdown" id="ms-d2c-owner">
+          <div class="ms-btn" onclick="toggleMs(event,'ms-d2c-owner')"><span>Todos</span><span>▾</span></div>
+          <div class="ms-panel">
+            <div class="ms-opt"><input type="checkbox" checked onchange="onMsAll(this,'ms-d2c-owner', applyD2ActivityReport)"><span>Selecionar todos</span></div>
+            <div class="ms-sep"></div>
+            ${PRE_VENDEDORES.map(n => `<div class="ms-opt"><input type="checkbox" checked value="${esc(n)}" onchange="onMsChange('ms-d2c-owner', applyD2ActivityReport)"><span>${esc(n)}</span></div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body tbl-wrap">
+      <table id="tbl-d2c">
+        <thead><tr><th>Pré-Vendedor</th><th class="r">Tentativas de Ligações</th><th class="r">Envio de WhatsApp</th><th class="r">Envio de E-mail</th></tr></thead>
+        <tbody id="tbl-d2c-body"></tbody>
+        <tfoot id="tbl-d2c-foot"></tfoot>
+      </table>
+    </div>
+    <div class="note" id="d2c-note"></div>
+  </div>
+
+  <div class="g2" id="d2-activity-grid" style="margin-top:16px">
+    <div class="card" data-card-id="d2-formas-conexao">
+      <div class="card-head" style="flex-wrap:wrap;gap:8px">
+        <div class="card-title">Formas de Conexão</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="d2f-date-start" class="filter-date" onchange="applyD2FormasConexao()" title="Data inicial (criação do lead)">
+          <span class="filter-sep">até</span>
+          <input type="date" id="d2f-date-end" class="filter-date" onchange="applyD2FormasConexao()" title="Data final (criação do lead)">
+          <div class="ms-dropdown" id="ms-d2f-owner">
+            <div class="ms-btn" onclick="toggleMs(event,'ms-d2f-owner')"><span>Todos</span><span>▾</span></div>
+            <div class="ms-panel">
+              <div class="ms-opt"><input type="checkbox" checked onchange="onMsAll(this,'ms-d2f-owner', applyD2FormasConexao)"><span>Selecionar todos</span></div>
+              <div class="ms-sep"></div>
+              ${PRE_VENDEDORES.map(n => `<div class="ms-opt"><input type="checkbox" checked value="${esc(n)}" onchange="onMsChange('ms-d2f-owner', applyD2FormasConexao)"><span>${esc(n)}</span></div>`).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body tbl-wrap">
+        <table id="tbl-d2f">
+          <thead><tr><th>Forma de Conexão</th><th class="r">Quantidade de Contatos</th></tr></thead>
+          <tbody id="tbl-d2f-body"></tbody>
+          <tfoot id="tbl-d2f-foot"></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" data-card-id="d2-resultado-ligacoes">
+      <div class="card-head" style="flex-wrap:wrap;gap:8px">
+        <div class="card-title">Resultado das Ligações</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="d2r-date-start" class="filter-date" onchange="applyD2ResultadoLigacoes()" title="Data inicial (ligação)">
+          <span class="filter-sep">até</span>
+          <input type="date" id="d2r-date-end" class="filter-date" onchange="applyD2ResultadoLigacoes()" title="Data final (ligação)">
+          <div class="ms-dropdown" id="ms-d2r-owner">
+            <div class="ms-btn" onclick="toggleMs(event,'ms-d2r-owner')"><span>Todos</span><span>▾</span></div>
+            <div class="ms-panel">
+              <div class="ms-opt"><input type="checkbox" checked onchange="onMsAll(this,'ms-d2r-owner', applyD2ResultadoLigacoes)"><span>Selecionar todos</span></div>
+              <div class="ms-sep"></div>
+              ${PRE_VENDEDORES.map(n => `<div class="ms-opt"><input type="checkbox" checked value="${esc(n)}" onchange="onMsChange('ms-d2r-owner', applyD2ResultadoLigacoes)"><span>${esc(n)}</span></div>`).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body tbl-wrap" style="max-height:420px">
+        <table id="tbl-d2r">
+          <thead><tr><th>Resultado da Chamada</th><th class="r">Quantidade de Chamadas</th></tr></thead>
+          <tbody id="tbl-d2r-body"></tbody>
+          <tfoot id="tbl-d2r-foot"></tfoot>
+        </table>
+      </div>
+      <div class="note" id="d2r-note"></div>
+    </div>
+  </div>
   `;
   restoreCardLayout(document.getElementById('d2-grid'), 'd2-grid');
+  restoreCardLayout(document.getElementById('d2-activity-grid'), 'd2-activity-grid');
 
+  window.__d2_data = data;
   restoreMsSelection('ms-d2-owner');
   applyD2Filter();
+
+  restoreMsSelection('ms-d2c-owner');
+  restoreDateFilter('d2c-date-start');
+  restoreDateFilter('d2c-date-end');
+  applyD2ActivityReport();
+
+  restoreMsSelection('ms-d2f-owner');
+  restoreDateFilter('d2f-date-start');
+  restoreDateFilter('d2f-date-end');
+  applyD2FormasConexao();
+
+  restoreMsSelection('ms-d2r-owner');
+  restoreDateFilter('d2r-date-start');
+  restoreDateFilter('d2r-date-end');
+  applyD2ResultadoLigacoes();
 }
 
 function applyD2Filter() {
@@ -1594,6 +1691,138 @@ function applyD2Filter() {
     const owner = tr.getAttribute('data-owner');
     tr.style.display = (selected.length === 0 || selected.includes(owner)) ? '' : 'none';
   });
+}
+
+/* ── Relatório "Ligações, WhatsApps e E-mails" ─────────────────────────
+   Tentativas de Ligações soma a propriedade tentativas_de_conexao dos
+   contatos (filtrada pela data de criação do lead); WhatsApp/E-mail contam
+   os registros de comunicação enviados no período, agrupados pelo
+   proprietário do CONTATO (mesmo critério do relatório "Whatsapps
+   Enviados" já usado no HubSpot). Quando data.whatsapps/emails vier null
+   (busca falhou — ex.: Communications bloqueado nesta integração), mostra
+   "—" em vez de 0, pra não passar a impressão de que ninguém enviou nada. */
+function applyD2ActivityReport() {
+  const data = window.__d2_data;
+  if (!data) return;
+  const start = (document.getElementById('d2c-date-start') || {}).value || '';
+  const end = (document.getElementById('d2c-date-end') || {}).value || '';
+  const selOwners = getSelectedMs('ms-d2c-owner');
+  filterSet('d2c-date-start', start);
+  filterSet('d2c-date-end', end);
+  filterSet('ms-d2c-owner', selOwners);
+  updateMsLabel('ms-d2c-owner', 'Todos');
+
+  const owners = selOwners.length ? selOwners : PRE_VENDEDORES;
+  const whatsappAvailable = data.whatsapps != null;
+  const emailsAvailable = data.emails != null;
+
+  const contactOwnerById = {};
+  data.contacts.forEach(c => { contactOwnerById[String(c.id)] = ownerName((c.properties||{}).hubspot_owner_id, data.owners); });
+
+  const rows = owners.map(name => {
+    const tentativas = data.contacts
+      .filter(c => ownerName((c.properties||{}).hubspot_owner_id, data.owners) === name && inDateRange((c.properties||{}).createdate, start, end))
+      .reduce((s,c) => s + (Number((c.properties||{}).tentativas_de_conexao) || 0), 0);
+    const whatsapp = whatsappAvailable ? data.whatsapps.filter(w => contactOwnerById[String(w.hs_object_id)] === name && inDateRange(w.hs_timestamp, start, end)).length : null;
+    const email = emailsAvailable ? data.emails.filter(e => contactOwnerById[String(e.hs_object_id)] === name && inDateRange(e.hs_timestamp, start, end)).length : null;
+    return { name, tentativas, whatsapp, email };
+  });
+
+  const tbody = document.getElementById('tbl-d2c-body');
+  if (tbody) {
+    tbody.innerHTML = rows.length ? rows.map(r => `
+    <tr>
+      <td class="tname">${esc(r.name)}</td>
+      <td class="r">${r.tentativas}</td>
+      <td class="r">${r.whatsapp === null ? '—' : r.whatsapp}</td>
+      <td class="r">${r.email === null ? '—' : r.email}</td>
+    </tr>`).join('') : '<tr><td colspan="4"><div class="empty-box">Nenhum pré-vendedor selecionado.</div></td></tr>';
+  }
+  const foot = document.getElementById('tbl-d2c-foot');
+  if (foot) {
+    foot.innerHTML = `<tr><td>Total</td><td class="r">${rows.reduce((s,r)=>s+r.tentativas,0)}</td><td class="r">${whatsappAvailable ? rows.reduce((s,r)=>s+(r.whatsapp||0),0) : '—'}</td><td class="r">${emailsAvailable ? rows.reduce((s,r)=>s+(r.email||0),0) : '—'}</td></tr>`;
+  }
+  const note = document.getElementById('d2c-note');
+  if (note) {
+    const warnings = [];
+    if (!whatsappAvailable) warnings.push('Envio de WhatsApp indisponível nesta consulta ao HubSpot (registros de Communications podem estar bloqueados pela integração atual).');
+    if (!emailsAvailable) warnings.push('Envio de E-mail indisponível nesta consulta ao HubSpot.');
+    if (warnings.length) {
+      note.className = 'alert a-amber';
+      note.innerHTML = warnings.join('<br>');
+    } else {
+      note.className = 'note';
+      note.textContent = 'Tentativas de Ligações usa a propriedade "Tentativas de Conexão" do contato, filtrada pela data de criação do lead. WhatsApp e E-mail contam os envios registrados no período, agrupados pelo proprietário do contato.';
+    }
+  }
+}
+
+/* ── Relatório "Formas de Conexão" ───────────────────────────────────── */
+function applyD2FormasConexao() {
+  const data = window.__d2_data;
+  if (!data) return;
+  const start = (document.getElementById('d2f-date-start') || {}).value || '';
+  const end = (document.getElementById('d2f-date-end') || {}).value || '';
+  const selOwners = getSelectedMs('ms-d2f-owner');
+  filterSet('d2f-date-start', start);
+  filterSet('d2f-date-end', end);
+  filterSet('ms-d2f-owner', selOwners);
+  updateMsLabel('ms-d2f-owner', 'Todos');
+  const owners = selOwners.length ? selOwners : PRE_VENDEDORES;
+
+  const pool = data.contacts.filter(c => owners.includes(ownerName((c.properties||{}).hubspot_owner_id, data.owners)) && inDateRange((c.properties||{}).createdate, start, end));
+  const counts = {};
+  pool.forEach(c => {
+    const label = cleanLabel((c.properties||{}).forma_de_conexao) || 'Não informado';
+    counts[label] = (counts[label] || 0) + 1;
+  });
+  const entries = Object.entries(counts).sort((a,b) => b[1] - a[1]);
+  const tbody = document.getElementById('tbl-d2f-body');
+  if (tbody) {
+    tbody.innerHTML = entries.length ? entries.map(([label,count]) => `<tr><td class="tname">${esc(label)}</td><td class="r">${count}</td></tr>`).join('') : '<tr><td colspan="2"><div class="empty-box">Nenhum contato no período selecionado.</div></td></tr>';
+  }
+  const foot = document.getElementById('tbl-d2f-foot');
+  if (foot) foot.innerHTML = `<tr><td>Total</td><td class="r">${pool.length}</td></tr>`;
+}
+
+/* ── Relatório "Resultado das Ligações" ──────────────────────────────── */
+function applyD2ResultadoLigacoes() {
+  const data = window.__d2_data;
+  if (!data) return;
+  const start = (document.getElementById('d2r-date-start') || {}).value || '';
+  const end = (document.getElementById('d2r-date-end') || {}).value || '';
+  const selOwners = getSelectedMs('ms-d2r-owner');
+  filterSet('d2r-date-start', start);
+  filterSet('d2r-date-end', end);
+  filterSet('ms-d2r-owner', selOwners);
+  updateMsLabel('ms-d2r-owner', 'Todos');
+  const owners = selOwners.length ? selOwners : PRE_VENDEDORES;
+
+  const tbody = document.getElementById('tbl-d2r-body');
+  const foot = document.getElementById('tbl-d2r-foot');
+  const note = document.getElementById('d2r-note');
+  const callsAvailable = data.calls != null;
+
+  if (!callsAvailable) {
+    if (tbody) tbody.innerHTML = '<tr><td colspan="2"><div class="empty-box">Não foi possível carregar ligações do HubSpot nesta consulta.</div></td></tr>';
+    if (foot) foot.innerHTML = '';
+    if (note) { note.className = 'alert a-amber'; note.textContent = 'Ligações indisponíveis nesta consulta ao HubSpot — clique em "Atualizar agora" para tentar de novo.'; }
+    return;
+  }
+  if (note) { note.className = 'note'; note.textContent = 'Resultado (disposição) de cada ligação registrada no HubSpot associada a contatos desta campanha.'; }
+
+  const labels = data.callDispositionLabels || {};
+  const pool = data.calls.filter(c => owners.includes(ownerName(c.hubspot_owner_id, data.owners)) && inDateRange(c.hs_timestamp, start, end));
+  const counts = {};
+  pool.forEach(c => {
+    const label = labels[c.hs_call_disposition] || (c.hs_call_disposition ? c.hs_call_disposition : 'Sem resultado');
+    counts[label] = (counts[label] || 0) + 1;
+  });
+  const entries = Object.entries(counts).sort((a,b) => b[1] - a[1]);
+  if (tbody) {
+    tbody.innerHTML = entries.length ? entries.map(([label,count]) => `<tr><td class="tname">${esc(label)}</td><td class="r">${count}</td></tr>`).join('') : '<tr><td colspan="2"><div class="empty-box">Nenhuma ligação no período selecionado.</div></td></tr>';
+  }
+  if (foot) foot.innerHTML = `<tr><td>Total</td><td class="r">${pool.length}</td></tr>`;
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -2059,7 +2288,7 @@ function renderD6(data) {
           <div class="ms-panel">
             <div class="ms-opt"><input type="checkbox" checked onchange="onMsAll(this,'ms-d6-owner', applyD6Filter)"><span>Selecionar todos</span></div>
             <div class="ms-sep"></div>
-            ${PRE_VENDEDORES_METAS.map(n => `<div class="ms-opt"><input type="checkbox" checked value="${esc(n)}" onchange="onMsChange('ms-d6-owner', applyD6Filter)"><span>${esc(n)}</span></div>`).join('')}
+            ${PRE_VENDEDORES.map(n => `<div class="ms-opt"><input type="checkbox" checked value="${esc(n)}" onchange="onMsChange('ms-d6-owner', applyD6Filter)"><span>${esc(n)}</span></div>`).join('')}
           </div>
         </div>
         <div class="ms-dropdown" id="ms-d6-quinzena">
@@ -2182,7 +2411,7 @@ function applyD6Filter() {
   updateMsLabel('ms-d6-owner', 'Todos');
   updateMsLabel('ms-d6-quinzena', 'Quinzena atual');
 
-  const owners = selOwners.length ? selOwners : PRE_VENDEDORES_METAS;
+  const owners = selOwners.length ? selOwners : PRE_VENDEDORES;
   const qIds = selQuinzenas.length ? selQuinzenas : metas.quinzenas.map(q => q.id);
   const nPeriodos = Math.max(1, qIds.length);
   const metaQ = META_QUALIFICADOS_POR_QUINZENA * nPeriodos;

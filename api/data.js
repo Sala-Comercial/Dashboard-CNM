@@ -224,6 +224,86 @@ async function fetchDealActivities(token, dealIds) {
   return result;
 }
 
+/* ── Ligações por contato (relatório "Resultado das Ligações" e a coluna
+   "Tentativas de Ligações" do relatório combinado) ────────────────────
+   Uma linha por par contato↔ligação: { hs_object_id, hubspot_owner_id,
+   hs_call_disposition (código bruto — resolvido via callDispositionLabels),
+   hs_timestamp }. */
+async function fetchCalls(token, contactIds) {
+  const assoc = await batchReadAssociations(token, 'contacts', 'calls', contactIds);
+  const allIds = [...new Set(Object.values(assoc).flat())];
+  if (!allIds.length) return [];
+  const callMap = await batchReadObjects(token, 'calls', allIds,
+    ['hs_call_disposition', 'hs_timestamp', 'hubspot_owner_id']);
+  const rows = [];
+  Object.keys(assoc).forEach(contactId => {
+    assoc[contactId].forEach(callId => {
+      const c = callMap[callId];
+      if (!c) return;
+      rows.push({
+        hs_object_id: contactId,
+        hubspot_owner_id: c.properties.hubspot_owner_id || '',
+        hs_call_disposition: c.properties.hs_call_disposition || '',
+        hs_timestamp: c.properties.hs_timestamp || ''
+      });
+    });
+  });
+  return rows;
+}
+
+// Mapa código→label do resultado da ligação (hs_call_disposition é uma
+// enumeração cujos values são GUIDs — sem essa consulta, a UI mostraria o
+// GUID cru em vez de "Sem resposta", "Número errado" etc.).
+async function fetchCallDispositionLabels(token) {
+  const data = await hsFetch(token, '/crm/v3/properties/calls/hs_call_disposition');
+  const map = {};
+  (data.options || []).forEach(o => { map[o.value] = o.label; });
+  return map;
+}
+
+/* ── E-mails por contato ("Envio de E-mail" do relatório combinado) ──── */
+async function fetchEmails(token, contactIds) {
+  const assoc = await batchReadAssociations(token, 'contacts', 'emails', contactIds);
+  const allIds = [...new Set(Object.values(assoc).flat())];
+  if (!allIds.length) return [];
+  const emailMap = await batchReadObjects(token, 'emails', allIds, ['hs_timestamp', 'hubspot_owner_id']);
+  const rows = [];
+  Object.keys(assoc).forEach(contactId => {
+    assoc[contactId].forEach(emailId => {
+      const e = emailMap[emailId];
+      if (!e) return;
+      rows.push({ hs_object_id: contactId, hubspot_owner_id: e.properties.hubspot_owner_id || '', hs_timestamp: e.properties.hs_timestamp || '' });
+    });
+  });
+  return rows;
+}
+
+/* ── WhatsApp por contato ("Envio de WhatsApp" do relatório combinado) ──
+   OBS: usa o mesmo tipo de objeto (Communications) que já está documentado
+   como bloqueado pela allowlist do conector usado em outras partes deste
+   projeto. Aqui usamos a API REST direta com o token da Vercel, que pode
+   ter acesso diferente — mas se a conta/token não tiver o escopo de
+   Communications, esta busca falha e cai no catch do handler (mesmo padrão
+   de reuniões/atividades), deixando "indisponível" claro na UI em vez de
+   fingir um resultado. */
+async function fetchWhatsapp(token, contactIds) {
+  const assoc = await batchReadAssociations(token, 'contacts', 'communications', contactIds);
+  const allIds = [...new Set(Object.values(assoc).flat())];
+  if (!allIds.length) return [];
+  const commMap = await batchReadObjects(token, 'communications', allIds,
+    ['hs_communication_channel_type', 'hs_timestamp', 'hubspot_owner_id']);
+  const rows = [];
+  Object.keys(assoc).forEach(contactId => {
+    assoc[contactId].forEach(commId => {
+      const c = commMap[commId];
+      if (!c) return;
+      if (String(c.properties.hs_communication_channel_type || '').toUpperCase() !== 'WHATS_APP') return;
+      rows.push({ hs_object_id: contactId, hubspot_owner_id: c.properties.hubspot_owner_id || '', hs_timestamp: c.properties.hs_timestamp || '' });
+    });
+  });
+  return rows;
+}
+
 /* ── Segmentações ─────────────────────────────────────────────────────
    O SQL cruzado (query_crm_data) não existe na API REST. Como já temos
    TODOS os contatos da campanha em memória, reproduzimos o GROUP BY em
@@ -316,6 +396,34 @@ export default async function handler(req, res) {
       console.warn('Falha ao buscar atividades de negócios:', e.message);
     }
 
+    const contactIds = contacts.map(c => c.id);
+    let calls = null;
+    let callsError = null;
+    let callDispositionLabels = {};
+    try {
+      calls = await fetchCalls(token, contactIds);
+      try { callDispositionLabels = await fetchCallDispositionLabels(token); } catch (e) { /* segue sem os labels — UI cai pro código bruto */ }
+    } catch (e) {
+      callsError = e.message;
+      console.warn('Falha ao buscar ligações:', e.message);
+    }
+    let emails = null;
+    let emailsError = null;
+    try {
+      emails = await fetchEmails(token, contactIds);
+    } catch (e) {
+      emailsError = e.message;
+      console.warn('Falha ao buscar e-mails:', e.message);
+    }
+    let whatsapps = null;
+    let whatsappsError = null;
+    try {
+      whatsapps = await fetchWhatsapp(token, contactIds);
+    } catch (e) {
+      whatsappsError = e.message;
+      console.warn('Falha ao buscar WhatsApp (Communications pode estar bloqueado nesta integração):', e.message);
+    }
+
     const fetchedAt = new Date().toISOString();
     const data = {
       contacts,
@@ -324,6 +432,10 @@ export default async function handler(req, res) {
       meetings,
       dealActivities,
       pipelines,
+      calls,
+      callDispositionLabels,
+      emails,
+      whatsapps,
       segByOrigem: groupBy1(contacts, 'origem_do_contato'),
       segByRegiao: groupBy1(contacts, 'regiao'),
       unqualByReason: groupBy1(contacts, 'unqualified_reason'),
@@ -347,7 +459,16 @@ export default async function handler(req, res) {
         dealActivitiesError,
         pipelinesCount: pipelines.length,
         pipelinesOk: pipelinesError === null,
-        pipelinesError
+        pipelinesError,
+        callsCount: calls ? calls.length : null,
+        callsOk: callsError === null,
+        callsError,
+        emailsCount: emails ? emails.length : null,
+        emailsOk: emailsError === null,
+        emailsError,
+        whatsappsCount: whatsapps ? whatsapps.length : null,
+        whatsappsOk: whatsappsError === null,
+        whatsappsError
       }
     };
 
