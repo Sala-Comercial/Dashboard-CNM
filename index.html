@@ -820,10 +820,41 @@ const DEAL_STAGE_LABELS = {
 // IDs de etapa que representam negócio encerrado sem êxito (perdido ou descontinuado).
 const LOST_STAGE_IDS = ["69074724","69068100","260468313","260424086"];
 
+// ── Índice etapa → pipeline, construído a partir de data.pipelines (vindo
+//    do /api/data, que busca a lista real de pipelines no HubSpot). Etapas
+//    com o mesmo nome existem em pipelines diferentes (ex.: "Oportunidade"),
+//    então sem esse índice elas ficavam indistinguíveis e fora de ordem.
+//    Reconstruído a cada carga de dados (ver applyLiveData/init). Se ainda
+//    não tiver pipelines (ex.: snapshot antigo), cai no mapa fixo abaixo.
+let STAGE_INDEX = {};
+function buildStageIndex(pipelines) {
+  const map = {};
+  (pipelines || []).forEach((p, pIdx) => {
+    (p.stages || []).forEach((s, sIdx) => {
+      map[String(s.id)] = {
+        stageLabel: s.label,
+        pipelineLabel: p.label,
+        pipelineOrder: p.displayOrder != null ? p.displayOrder : pIdx,
+        stageOrder: s.displayOrder != null ? s.displayOrder : sIdx
+      };
+    });
+  });
+  return map;
+}
 function dealStageLabel(raw) {
   const key = String(raw == null ? '' : raw).trim();
+  const info = STAGE_INDEX[key];
+  if (info) return info.stageLabel + (info.pipelineLabel ? ' (' + info.pipelineLabel + ')' : '');
   return DEAL_STAGE_LABELS[key] || cleanLabel(raw) || 'Sem etapa';
 }
+// Chave de ordenação (pipeline, depois etapa) — usada para exibir o funil e
+// o pipeline de negócios na ordem real das pipelines, em vez de por contagem.
+function dealStageSortKey(raw) {
+  const key = String(raw == null ? '' : raw).trim();
+  const info = STAGE_INDEX[key];
+  return info ? [info.pipelineOrder, info.stageOrder] : [999, 0];
+}
+function compareStageKeys(a, b) { return a[0] - b[0] || a[1] - b[1]; }
 function isDealLost(d) {
   const st = String((d.properties && d.properties.dealstage) || '').trim();
   return LOST_STAGE_IDS.includes(st);
@@ -1096,12 +1127,15 @@ function buildDealFunnelHtml(deals) {
   const dealsPerdidos = deals.filter(isDealLost);
   const stageMap = {};
   dealsAbertos.forEach(d => {
-    const label = dealStageLabel(d.properties && d.properties.dealstage);
-    if (!stageMap[label]) stageMap[label] = { count: 0, value: 0 };
+    const raw = d.properties && d.properties.dealstage;
+    const label = dealStageLabel(raw);
+    if (!stageMap[label]) stageMap[label] = { count: 0, value: 0, sortKey: dealStageSortKey(raw) };
     stageMap[label].count++;
     stageMap[label].value += Number(d.properties && d.properties.amount) || 0;
   });
-  const stageRows = Object.entries(stageMap).sort((a,b) => b[1].count - a[1].count);
+  // Ordem das pipelines/etapas (não por contagem) — cada etapa aparece como
+  // "Nome da Etapa (Nome da Pipeline)", na ordem real configurada no HubSpot.
+  const stageRows = Object.entries(stageMap).sort((a,b) => compareStageKeys(a[1].sortKey, b[1].sortKey));
   const dealFunnelRows = stageRows.map(([label, v]) => ({ label, count: v.count, value: v.value, pct: pctNum(v.count, deals.length) }));
   const pctPerdidos = pctNum(dealsPerdidos.length, deals.length);
 
@@ -1216,15 +1250,16 @@ function renderD1(data) {
   });
   const motivos = Object.entries(motivoMap).map(([label,count]) => ({label,count})).sort((a,b) => b.count - a.count);
 
-  // pipeline por etapa
+  // pipeline por etapa — ordem real das pipelines/etapas, não por contagem
   const stageMap = {};
   dealsAbertos.forEach(d => {
-    const label = dealStageLabel(d.properties && d.properties.dealstage);
-    if (!stageMap[label]) stageMap[label] = { count: 0, value: 0 };
+    const raw = d.properties && d.properties.dealstage;
+    const label = dealStageLabel(raw);
+    if (!stageMap[label]) stageMap[label] = { count: 0, value: 0, sortKey: dealStageSortKey(raw) };
     stageMap[label].count++;
     stageMap[label].value += Number(d.properties && d.properties.amount) || 0;
   });
-  const stageRows = Object.entries(stageMap).sort((a,b) => b[1].count - a[1].count);
+  const stageRows = Object.entries(stageMap).sort((a,b) => compareStageKeys(a[1].sortKey, b[1].sortKey));
 
   // funil de negócios: distribuição por etapa (abertos) + perdidos, em % do total de negócios
   const dealFunnelRows = stageRows.map(([label, v]) => ({ label, count: v.count, value: v.value, pct: pctNum(v.count, deals.length) }));
@@ -1650,15 +1685,16 @@ function renderD4(data) {
 
   const stageMap = {};
   dealsAbertos.forEach(d => {
-    const label = dealStageLabel(d.properties && d.properties.dealstage);
-    if (!stageMap[label]) stageMap[label] = { count:0, value:0 };
+    const raw = d.properties && d.properties.dealstage;
+    const label = dealStageLabel(raw);
+    if (!stageMap[label]) stageMap[label] = { count:0, value:0, sortKey: dealStageSortKey(raw) };
     stageMap[label].count++;
     stageMap[label].value += Number(d.properties && d.properties.amount) || 0;
   });
-  const stageEntries = Object.entries(stageMap).sort((a,b) => b[1].count - a[1].count);
+  const stageEntries = Object.entries(stageMap).sort((a,b) => compareStageKeys(a[1].sortKey, b[1].sortKey));
 
   const ownerSet = [...new Set(dealsAbertos.map(d => ownerName(d.properties && d.properties.hubspot_owner_id, data.owners)))];
-  const stageSet = [...new Set(dealsAbertos.map(d => dealStageLabel(d.properties && d.properties.dealstage)))];
+  const stageSet = stageEntries.map(([label]) => label);
 
   root.innerHTML = `
   <div class="kpi-strip ks-4">
@@ -2227,6 +2263,7 @@ async function init() {
   if (snapshot) {
     try {
       window.__dash = snapshot;
+      STAGE_INDEX = buildStageIndex(snapshot.pipelines);
       renderD1(snapshot); renderD2(snapshot); renderD3(snapshot);
       renderD4(snapshot); renderD5(snapshot); renderD6(snapshot);
       hasData = true;
@@ -2344,6 +2381,7 @@ function setUpdatingIndicator(on) {
 function applyLiveData(data, forced) {
   window.__dash = data;
   window.__CNM26_STATIC_DATA__ = data;
+  STAGE_INDEX = buildStageIndex(data.pipelines);
   renderD1(data);
   renderD2(data);
   renderD3(data);

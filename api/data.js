@@ -107,6 +107,22 @@ async function fetchOwners(token) {
   return map;
 }
 
+// ── Pipelines de negócio (nome + ordem de cada pipeline/etapa) ───────
+// O ID de etapa (dealstage) é único por pipeline no HubSpot, mas pipelines
+// diferentes costumam ter etapas com o MESMO nome (ex.: "Oportunidade" em
+// mais de uma pipeline). Sem saber de qual pipeline cada etapa é, a UI não
+// tem como distinguir/ordenar corretamente — por isso buscamos aqui a lista
+// real de pipelines em vez de confiar só num mapa fixo de nomes.
+async function fetchPipelines(token) {
+  const data = await hsFetch(token, '/crm/v3/pipelines/deals');
+  return (data.results || []).map(p => ({
+    id: String(p.id),
+    label: p.label,
+    displayOrder: p.displayOrder,
+    stages: (p.stages || []).map(s => ({ id: String(s.id), label: s.label, displayOrder: s.displayOrder }))
+  }));
+}
+
 // ── Util: divide um array em lotes de tamanho n ─────────────────────
 function chunk(arr, n) {
   const out = [];
@@ -272,6 +288,15 @@ export default async function handler(req, res) {
     const owners = await fetchOwners(token);
     const deals = await searchAll(token, 'deals', DEAL_PROPS);
 
+    let pipelines = [];
+    let pipelinesError = null;
+    try {
+      pipelines = await fetchPipelines(token);
+    } catch (e) {
+      pipelinesError = e.message;
+      console.warn('Falha ao buscar pipelines:', e.message);
+    }
+
     // Fase 2: reuniões (por contato) e atividades (por negócio) via Associations API.
     // Em caso de falha pontual, meetings cai para null (a UI já trata "indisponível").
     let meetings = null;
@@ -298,6 +323,7 @@ export default async function handler(req, res) {
       deals,
       meetings,
       dealActivities,
+      pipelines,
       segByOrigem: groupBy1(contacts, 'origem_do_contato'),
       segByRegiao: groupBy1(contacts, 'regiao'),
       unqualByReason: groupBy1(contacts, 'unqualified_reason'),
@@ -318,7 +344,10 @@ export default async function handler(req, res) {
         meetingsOk: meetingsError === null,
         meetingsError,
         dealActivitiesOk: dealActivitiesError === null,
-        dealActivitiesError
+        dealActivitiesError,
+        pipelinesCount: pipelines.length,
+        pipelinesOk: pipelinesError === null,
+        pipelinesError
       }
     };
 
